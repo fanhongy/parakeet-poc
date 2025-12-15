@@ -10,6 +10,11 @@
 ```bash
 cd parakeet-poc
 npm install
+
+# Build Lambda layer for gRPC (required before first deploy)
+python3 -m venv .venv
+.venv/bin/pip install grpcio-tools
+./scripts/build-lambda-layer.sh
 ```
 
 ## Deployment Commands
@@ -24,8 +29,11 @@ cdk diff               # Preview changes
 ## Testing Transcription
 
 ```bash
-# Upload audio
+# Standard audio (up to 30 min, 30s chunks)
 aws s3 cp your-audio.wav s3://parakeet-poc-<account>-us-east-1/input/
+
+# Long audio (up to 60 min, no chunking - full audio processing)
+aws s3 cp your-long-audio.wav s3://parakeet-poc-<account>-us-east-1/input-long/
 
 # Check output
 aws s3 ls s3://parakeet-poc-<account>-us-east-1/output/
@@ -50,8 +58,17 @@ Edit `bin/parakeet-poc.ts`, update `parakeetModel`, then `cdk deploy`.
 
 - CDK infrastructure in TypeScript (`lib/`, `bin/`)
 - Runtime code in Python (`scripts/`, `lambda/`)
+- gRPC service definition in `proto/transcribe.proto`
 - Use `flush=True` on print statements in ECS container for real-time logs
-- Transcription server uses chunked processing (30s segments) for memory efficiency
+- Transcription server: gRPC over NLB (port 50051)
+- Chunked (30s) for standard, full audio for long-audio service
+
+## Updating Proto Definition
+
+After modifying `proto/transcribe.proto`, regenerate Python files:
+```bash
+./scripts/build-lambda-layer.sh
+```
 
 ## Output JSON Structure
 

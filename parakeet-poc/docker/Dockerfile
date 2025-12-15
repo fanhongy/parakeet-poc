@@ -1,0 +1,31 @@
+# Parakeet ASR gRPC Server
+# Based on NVIDIA NeMo with pre-installed dependencies
+
+FROM nvcr.io/nvidia/nemo:24.09
+
+# Install gRPC dependencies
+RUN pip install --no-cache-dir \
+    boto3 \
+    grpcio \
+    grpcio-tools \
+    psutil
+
+# Create app directory
+WORKDIR /app
+
+# Copy proto and generate Python files
+COPY proto/transcribe.proto /app/
+RUN python -m grpc_tools.protoc -I/app --python_out=/app --grpc_python_out=/app /app/transcribe.proto
+
+# Copy transcription server
+COPY scripts/transcribe_grpc.py /app/
+
+# Default environment variables (can be overridden at runtime)
+ENV GRPC_PORT=50051
+ENV CHUNK_DURATION=30
+ENV MAX_AUDIO_DURATION_MINUTES=60
+
+EXPOSE 50051
+
+# Run gRPC server
+CMD ["python", "/app/transcribe_grpc.py"]

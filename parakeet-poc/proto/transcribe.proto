@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package transcribe;
+
+// Transcription service definition
+service TranscribeService {
+  // Transcribe audio file from S3
+  rpc Transcribe(TranscribeRequest) returns (TranscribeResponse);
+  
+  // Health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message TranscribeRequest {
+  string input_key = 1;  // S3 key of the audio file
+}
+
+message TranscribeResponse {
+  string input_file = 1;
+  string model = 2;
+  string transcription = 3;
+  repeated Segment segments = 4;
+  double audio_duration_seconds = 5;
+  Timing timing = 6;
+  ProcessingConfig processing_config = 7;
+  MemoryStats memory = 8;
+  string error = 9;  // Empty if successful
+}
+
+message Segment {
+  int32 index = 1;
+  double start_time = 2;
+  double end_time = 3;
+  string text = 4;
+  double processing_time = 5;
+}
+
+message Timing {
+  double download_seconds = 1;
+  double prep_seconds = 2;
+  double transcription_seconds = 3;
+  double total_seconds = 4;
+}
+
+message ProcessingConfig {
+  bool chunking_enabled = 1;
+  int32 chunk_duration_seconds = 2;
+  int32 total_chunks = 3;
+  int32 max_audio_duration_minutes = 4;
+}
+
+message MemoryStats {
+  double gpu_peak_gb = 1;
+  double gpu_total_gb = 2;
+  double system_ram_used_gb = 3;
+  double system_ram_total_gb = 4;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  bool model_loaded = 2;
+  ProcessingConfig config = 3;
+}

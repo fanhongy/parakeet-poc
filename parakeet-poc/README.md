@@ -4,9 +4,19 @@ Lightweight PoC for testing NVIDIA Parakeet speech-to-text on ECS with GPU.
 
 ## Architecture
 
+Dual-path architecture for different audio lengths:
+
 ```
-S3 (input/) → Lambda → ECS Task (GPU) → S3 (output/)
+S3 (input/)      → Lambda → ALB → ECS Standard (g4dn.2xlarge)  → S3 (output/)
+S3 (input-long/) → Lambda → ALB → ECS Long Audio (g5.4xlarge) → S3 (output/)
 ```
+
+### Service Configurations
+
+| Prefix | Instance | GPU | Chunking | Max Audio | Use Case |
+|--------|----------|-----|----------|-----------|----------|
+| `input/` | g4dn.2xlarge | T4 (16GB) | 30s chunks | 30 min | Short/medium audio |
+| `input-long/` | g5.4xlarge | A10G (24GB) | No chunking | 60 min | Long audio (full processing) |
 
 ## Prerequisites
 
@@ -26,13 +36,19 @@ cdk deploy
 
 ## Usage
 
-Upload audio to trigger transcription:
+### Standard Audio (up to 30 min)
 
 ```bash
 aws s3 cp your-audio.wav s3://parakeet-poc-<account>-us-east-1/input/
 ```
 
-Check output:
+### Long Audio (up to 60 min)
+
+```bash
+aws s3 cp your-long-audio.wav s3://parakeet-poc-<account>-us-east-1/input-long/
+```
+
+### Check Output
 
 ```bash
 aws s3 ls s3://parakeet-poc-<account>-us-east-1/output/
@@ -69,20 +85,8 @@ cdk destroy
 
 ## Notes
 
-- Supports `.wav` and `.mp3` files in `input/` prefix
+- Supports `.wav` and `.mp3` files
 - Output includes timing metrics for benchmarking
-- g4dn.xlarge provides 1x T4 GPU (16GB VRAM)
-- For 50-min audio, expect ~5-15 min processing depending on model
-
-
-## Record: 
-
-December 8, 2025, 16:51:02 (UTC+11:00)
-December 8, 2025, 16:52:02 (UTC+11:00)
-
-December 8, 2025, 17:24:55 (UTC+11:00)
-December 8, 2025, 17:24:56 (UTC+11:00)
-
-
-2025-12-09T14:07:11.076+11:00
-2025-12-09T14:08:41.442+11:00
+- Standard service: g4dn.2xlarge (T4 GPU, 16GB VRAM)
+- Long audio service: g5.4xlarge (A10G GPU, 24GB VRAM)
+- Chunk size is configurable per service for memory efficiency

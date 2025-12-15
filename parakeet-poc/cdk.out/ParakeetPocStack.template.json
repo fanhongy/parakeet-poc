@@ -161,6 +161,56 @@
          "Arn"
         ]
        }
+      },
+      {
+       "Events": [
+        "s3:ObjectCreated:*"
+       ],
+       "Filter": {
+        "Key": {
+         "FilterRules": [
+          {
+           "Name": "suffix",
+           "Value": ".wav"
+          },
+          {
+           "Name": "prefix",
+           "Value": "input-nochunk/"
+          }
+         ]
+        }
+       },
+       "LambdaFunctionArn": {
+        "Fn::GetAtt": [
+         "TriggerLambda2FDB819B",
+         "Arn"
+        ]
+       }
+      },
+      {
+       "Events": [
+        "s3:ObjectCreated:*"
+       ],
+       "Filter": {
+        "Key": {
+         "FilterRules": [
+          {
+           "Name": "suffix",
+           "Value": ".mp3"
+          },
+          {
+           "Name": "prefix",
+           "Value": "input-nochunk/"
+          }
+         ]
+        }
+       },
+       "LambdaFunctionArn": {
+        "Fn::GetAtt": [
+         "TriggerLambda2FDB819B",
+         "Arn"
+        ]
+       }
       }
      ]
     },
@@ -288,10 +338,20 @@
      ]
     },
     "SourceBucketNames": [
+     "cdk-hnb659fds-assets-234937851863-us-east-1",
      "cdk-hnb659fds-assets-234937851863-us-east-1"
     ],
     "SourceObjectKeys": [
-     "0713c7ee7dc01e5ca307b1a06de1a503b56c40c296e18f72eb02092758ca17e8.zip"
+     "ae32f125b3df2475c6ebb57d476b81d8fee8edd8e53b0e9a29ec71703626fa01.zip",
+     "bd0197aec20232be2435f78cb12449e415eed3775a2ea93684ea81d54d283bff.zip"
+    ],
+    "SourceMarkers": [
+     {},
+     {}
+    ],
+    "SourceMarkersConfig": [
+     {},
+     {}
     ],
     "DestinationBucketName": {
      "Ref": "AudioBucket96BEECBA"
@@ -478,10 +538,10 @@
     "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityInstanceSecurityGroupF2AB68CA": {
+  "ParakeetClusterStandardGpuCapacityInstanceSecurityGroupF77FA3F0": {
    "Type": "AWS::EC2::SecurityGroup",
    "Properties": {
-    "GroupDescription": "ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceSecurityGroup",
+    "GroupDescription": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceSecurityGroup",
     "SecurityGroupEgress": [
      {
       "CidrIp": "0.0.0.0/0",
@@ -492,16 +552,16 @@
     "Tags": [
      {
       "Key": "Name",
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ],
     "VpcId": "vpc-0d6c5654761cfd6fd"
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceSecurityGroup/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceSecurityGroup/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityInstanceRole993C7F50": {
+  "ParakeetClusterStandardGpuCapacityInstanceRole310ADE38": {
    "Type": "AWS::IAM::Role",
    "Properties": {
     "AssumeRolePolicyDocument": {
@@ -519,15 +579,15 @@
     "Tags": [
      {
       "Key": "Name",
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceRole/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceRole/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityInstanceRoleDefaultPolicyAF98BA0C": {
+  "ParakeetClusterStandardGpuCapacityInstanceRoleDefaultPolicy8BCA22A9": {
    "Type": "AWS::IAM::Policy",
    "Properties": {
     "PolicyDocument": {
@@ -577,31 +637,31 @@
      ],
      "Version": "2012-10-17"
     },
-    "PolicyName": "ParakeetClusterGpuCapacityInstanceRoleDefaultPolicyAF98BA0C",
+    "PolicyName": "ParakeetClusterStandardGpuCapacityInstanceRoleDefaultPolicy8BCA22A9",
     "Roles": [
      {
-      "Ref": "ParakeetClusterGpuCapacityInstanceRole993C7F50"
+      "Ref": "ParakeetClusterStandardGpuCapacityInstanceRole310ADE38"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceRole/DefaultPolicy/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceRole/DefaultPolicy/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityInstanceProfileD1118825": {
+  "ParakeetClusterStandardGpuCapacityInstanceProfileB513530C": {
    "Type": "AWS::IAM::InstanceProfile",
    "Properties": {
     "Roles": [
      {
-      "Ref": "ParakeetClusterGpuCapacityInstanceRole993C7F50"
+      "Ref": "ParakeetClusterStandardGpuCapacityInstanceRole310ADE38"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceProfile"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceProfile"
    }
   },
-  "ParakeetClusterGpuCapacityLaunchConfig1FD36DB1": {
+  "ParakeetClusterStandardGpuCapacityLaunchConfigB259389B": {
    "Type": "AWS::AutoScaling::LaunchConfiguration",
    "Properties": {
     "BlockDeviceMappings": [
@@ -609,13 +669,13 @@
       "DeviceName": "/dev/xvda",
       "Ebs": {
        "DeleteOnTermination": true,
-       "VolumeSize": 100,
+       "VolumeSize": 200,
        "VolumeType": "gp3"
       }
      }
     ],
     "IamInstanceProfile": {
-     "Ref": "ParakeetClusterGpuCapacityInstanceProfileD1118825"
+     "Ref": "ParakeetClusterStandardGpuCapacityInstanceProfileB513530C"
     },
     "ImageId": {
      "Ref": "SsmParameterValueawsserviceecsoptimizedamiamazonlinux2gpurecommendedimageidC96584B6F00A464EAD1953AFF4B05118Parameter"
@@ -624,7 +684,7 @@
     "SecurityGroups": [
      {
       "Fn::GetAtt": [
-       "ParakeetClusterGpuCapacityInstanceSecurityGroupF2AB68CA",
+       "ParakeetClusterStandardGpuCapacityInstanceSecurityGroupF77FA3F0",
        "GroupId"
       ]
      }
@@ -645,27 +705,27 @@
     }
    },
    "DependsOn": [
-    "ParakeetClusterGpuCapacityInstanceRoleDefaultPolicyAF98BA0C",
-    "ParakeetClusterGpuCapacityInstanceRole993C7F50"
+    "ParakeetClusterStandardGpuCapacityInstanceRoleDefaultPolicy8BCA22A9",
+    "ParakeetClusterStandardGpuCapacityInstanceRole310ADE38"
    ],
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/LaunchConfig"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LaunchConfig"
    }
   },
-  "ParakeetClusterGpuCapacityASG85D32FB0": {
+  "ParakeetClusterStandardGpuCapacityASG38F4539F": {
    "Type": "AWS::AutoScaling::AutoScalingGroup",
    "Properties": {
-    "DesiredCapacity": "1",
+    "DesiredCapacity": "2",
     "LaunchConfigurationName": {
-     "Ref": "ParakeetClusterGpuCapacityLaunchConfig1FD36DB1"
+     "Ref": "ParakeetClusterStandardGpuCapacityLaunchConfigB259389B"
     },
-    "MaxSize": "1",
-    "MinSize": "1",
+    "MaxSize": "2",
+    "MinSize": "2",
     "Tags": [
      {
       "Key": "Name",
       "PropagateAtLaunch": true,
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ],
     "VPCZoneIdentifier": [
@@ -682,10 +742,10 @@
     }
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/ASG"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/ASG"
    }
   },
-  "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRole0EAEB262": {
+  "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRole9BD84AD9": {
    "Type": "AWS::IAM::Role",
    "Properties": {
     "AssumeRolePolicyDocument": {
@@ -717,15 +777,15 @@
     "Tags": [
      {
       "Key": "Name",
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/ServiceRole/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/ServiceRole/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy722E52CF": {
+  "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy31E50108": {
    "Type": "AWS::IAM::Policy",
    "Properties": {
     "PolicyDocument": {
@@ -753,7 +813,7 @@
           },
           ":autoscaling:us-east-1:234937851863:autoScalingGroup:*:autoScalingGroupName/",
           {
-           "Ref": "ParakeetClusterGpuCapacityASG85D32FB0"
+           "Ref": "ParakeetClusterStandardGpuCapacityASG38F4539F"
           }
          ]
         ]
@@ -812,18 +872,18 @@
      ],
      "Version": "2012-10-17"
     },
-    "PolicyName": "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy722E52CF",
+    "PolicyName": "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy31E50108",
     "Roles": [
      {
-      "Ref": "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRole0EAEB262"
+      "Ref": "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRole9BD84AD9"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityDrainECSHookFunctionCDE7372A": {
+  "ParakeetClusterStandardGpuCapacityDrainECSHookFunction415C73C8": {
    "Type": "AWS::Lambda::Function",
    "Properties": {
     "Code": {
@@ -839,7 +899,7 @@
     "Handler": "index.lambda_handler",
     "Role": {
      "Fn::GetAtt": [
-      "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRole0EAEB262",
+      "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRole9BD84AD9",
       "Arn"
      ]
     },
@@ -847,71 +907,71 @@
     "Tags": [
      {
       "Key": "Name",
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ],
     "Timeout": 310
    },
    "DependsOn": [
-    "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy722E52CF",
-    "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRole0EAEB262"
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy31E50108",
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRole9BD84AD9"
    ],
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterGpuCapacityLifecycleHookDrainHookTopic7B1CAC9FA4130571": {
+  "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicC0DE986E479316FF": {
    "Type": "AWS::Lambda::Permission",
    "Properties": {
     "Action": "lambda:InvokeFunction",
     "FunctionName": {
      "Fn::GetAtt": [
-      "ParakeetClusterGpuCapacityDrainECSHookFunctionCDE7372A",
+      "ParakeetClusterStandardGpuCapacityDrainECSHookFunction415C73C8",
       "Arn"
      ]
     },
     "Principal": "sns.amazonaws.com",
     "SourceArn": {
-     "Ref": "ParakeetClusterGpuCapacityLifecycleHookDrainHookTopic1F8E29F5"
+     "Ref": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684"
     }
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/AllowInvoke:ParakeetPocStackParakeetClusterGpuCapacityLifecycleHookDrainHookTopic7B1CAC9F"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/AllowInvoke:ParakeetPocStackParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicC0DE986E"
    }
   },
-  "ParakeetClusterGpuCapacityDrainECSHookFunctionTopic72B62574": {
+  "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionTopic87B7D79A": {
    "Type": "AWS::SNS::Subscription",
    "Properties": {
     "Endpoint": {
      "Fn::GetAtt": [
-      "ParakeetClusterGpuCapacityDrainECSHookFunctionCDE7372A",
+      "ParakeetClusterStandardGpuCapacityDrainECSHookFunction415C73C8",
       "Arn"
      ]
     },
     "Protocol": "lambda",
     "TopicArn": {
-     "Ref": "ParakeetClusterGpuCapacityLifecycleHookDrainHookTopic1F8E29F5"
+     "Ref": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684"
     }
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/Topic/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/Topic/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityLifecycleHookDrainHookTopic1F8E29F5": {
+  "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684": {
    "Type": "AWS::SNS::Topic",
    "Properties": {
     "Tags": [
      {
       "Key": "Name",
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Topic/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Topic/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityLifecycleHookDrainHookRole0D156CA3": {
+  "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleBC0F45F7": {
    "Type": "AWS::IAM::Role",
    "Properties": {
     "AssumeRolePolicyDocument": {
@@ -929,15 +989,15 @@
     "Tags": [
      {
       "Key": "Name",
-      "Value": "ParakeetPocStack/ParakeetCluster/GpuCapacity"
+      "Value": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Role/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Role/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy7FB050C6": {
+  "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy37289C48": {
    "Type": "AWS::IAM::Policy",
    "Properties": {
     "PolicyDocument": {
@@ -946,48 +1006,560 @@
        "Action": "sns:Publish",
        "Effect": "Allow",
        "Resource": {
-        "Ref": "ParakeetClusterGpuCapacityLifecycleHookDrainHookTopic1F8E29F5"
+        "Ref": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684"
        }
       }
      ],
      "Version": "2012-10-17"
     },
-    "PolicyName": "ParakeetClusterGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy7FB050C6",
+    "PolicyName": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy37289C48",
     "Roles": [
      {
-      "Ref": "ParakeetClusterGpuCapacityLifecycleHookDrainHookRole0D156CA3"
+      "Ref": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleBC0F45F7"
      }
     ]
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource"
    }
   },
-  "ParakeetClusterGpuCapacityLifecycleHookDrainHook4B725F90": {
+  "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHook8A729A59": {
    "Type": "AWS::AutoScaling::LifecycleHook",
    "Properties": {
     "AutoScalingGroupName": {
-     "Ref": "ParakeetClusterGpuCapacityASG85D32FB0"
+     "Ref": "ParakeetClusterStandardGpuCapacityASG38F4539F"
     },
     "DefaultResult": "CONTINUE",
     "HeartbeatTimeout": 300,
     "LifecycleTransition": "autoscaling:EC2_INSTANCE_TERMINATING",
     "NotificationTargetARN": {
-     "Ref": "ParakeetClusterGpuCapacityLifecycleHookDrainHookTopic1F8E29F5"
+     "Ref": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684"
     },
     "RoleARN": {
      "Fn::GetAtt": [
-      "ParakeetClusterGpuCapacityLifecycleHookDrainHookRole0D156CA3",
+      "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleBC0F45F7",
       "Arn"
      ]
     }
    },
    "DependsOn": [
-    "ParakeetClusterGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy7FB050C6",
-    "ParakeetClusterGpuCapacityLifecycleHookDrainHookRole0D156CA3"
+    "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy37289C48",
+    "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleBC0F45F7"
    ],
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Resource"
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityInstanceSecurityGroup6F192AD1": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceSecurityGroup",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow all outbound traffic by default",
+      "IpProtocol": "-1"
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ],
+    "VpcId": "vpc-0d6c5654761cfd6fd"
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceSecurityGroup/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityInstanceRole6F08823E": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "ec2.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceRole/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityInstanceRoleDefaultPolicyB7A20078": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "ecs:DeregisterContainerInstance",
+        "ecs:RegisterContainerInstance",
+        "ecs:Submit*"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::GetAtt": [
+         "ParakeetClusterA1338BEA",
+         "Arn"
+        ]
+       }
+      },
+      {
+       "Action": [
+        "ecs:Poll",
+        "ecs:StartTelemetrySession"
+       ],
+       "Condition": {
+        "ArnEquals": {
+         "ecs:cluster": {
+          "Fn::GetAtt": [
+           "ParakeetClusterA1338BEA",
+           "Arn"
+          ]
+         }
+        }
+       },
+       "Effect": "Allow",
+       "Resource": "*"
+      },
+      {
+       "Action": [
+        "ecs:DiscoverPollEndpoint",
+        "ecr:GetAuthorizationToken",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+       ],
+       "Effect": "Allow",
+       "Resource": "*"
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "ParakeetClusterNoChunkGpuCapacityInstanceRoleDefaultPolicyB7A20078",
+    "Roles": [
+     {
+      "Ref": "ParakeetClusterNoChunkGpuCapacityInstanceRole6F08823E"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceRole/DefaultPolicy/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityInstanceProfileD1ED28E7": {
+   "Type": "AWS::IAM::InstanceProfile",
+   "Properties": {
+    "Roles": [
+     {
+      "Ref": "ParakeetClusterNoChunkGpuCapacityInstanceRole6F08823E"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceProfile"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityLaunchConfig57B7F268": {
+   "Type": "AWS::AutoScaling::LaunchConfiguration",
+   "Properties": {
+    "BlockDeviceMappings": [
+     {
+      "DeviceName": "/dev/xvda",
+      "Ebs": {
+       "DeleteOnTermination": true,
+       "VolumeSize": 200,
+       "VolumeType": "gp3"
+      }
+     }
+    ],
+    "IamInstanceProfile": {
+     "Ref": "ParakeetClusterNoChunkGpuCapacityInstanceProfileD1ED28E7"
+    },
+    "ImageId": {
+     "Ref": "SsmParameterValueawsserviceecsoptimizedamiamazonlinux2gpurecommendedimageidC96584B6F00A464EAD1953AFF4B05118Parameter"
+    },
+    "InstanceType": "g5.2xlarge",
+    "SecurityGroups": [
+     {
+      "Fn::GetAtt": [
+       "ParakeetClusterNoChunkGpuCapacityInstanceSecurityGroup6F192AD1",
+       "GroupId"
+      ]
+     }
+    ],
+    "UserData": {
+     "Fn::Base64": {
+      "Fn::Join": [
+       "",
+       [
+        "#!/bin/bash\necho ECS_CLUSTER=",
+        {
+         "Ref": "ParakeetClusterA1338BEA"
+        },
+        " >> /etc/ecs/ecs.config\nsudo iptables --insert FORWARD 1 --in-interface docker+ --destination 169.254.169.254/32 --jump DROP\nsudo service iptables save\necho ECS_AWSVPC_BLOCK_IMDS=true >> /etc/ecs/ecs.config"
+       ]
+      ]
+     }
+    }
+   },
+   "DependsOn": [
+    "ParakeetClusterNoChunkGpuCapacityInstanceRoleDefaultPolicyB7A20078",
+    "ParakeetClusterNoChunkGpuCapacityInstanceRole6F08823E"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LaunchConfig"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityASG918B7BA5": {
+   "Type": "AWS::AutoScaling::AutoScalingGroup",
+   "Properties": {
+    "DesiredCapacity": "2",
+    "LaunchConfigurationName": {
+     "Ref": "ParakeetClusterNoChunkGpuCapacityLaunchConfig57B7F268"
+    },
+    "MaxSize": "2",
+    "MinSize": "2",
+    "Tags": [
+     {
+      "Key": "Name",
+      "PropagateAtLaunch": true,
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ],
+    "VPCZoneIdentifier": [
+     "subnet-0808460014e270037",
+     "subnet-0d998ba3630576b93"
+    ]
+   },
+   "UpdatePolicy": {
+    "AutoScalingReplacingUpdate": {
+     "WillReplace": true
+    },
+    "AutoScalingScheduledAction": {
+     "IgnoreUnmodifiedGroupSizeProperties": true
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/ASG"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRole6F214989": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+       ]
+      ]
+     }
+    ],
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/ServiceRole/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicyED7A22CB": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceAttribute",
+        "ec2:DescribeInstanceStatus",
+        "ec2:DescribeHosts"
+       ],
+       "Effect": "Allow",
+       "Resource": "*"
+      },
+      {
+       "Action": "autoscaling:CompleteLifecycleAction",
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::Join": [
+         "",
+         [
+          "arn:",
+          {
+           "Ref": "AWS::Partition"
+          },
+          ":autoscaling:us-east-1:234937851863:autoScalingGroup:*:autoScalingGroupName/",
+          {
+           "Ref": "ParakeetClusterNoChunkGpuCapacityASG918B7BA5"
+          }
+         ]
+        ]
+       }
+      },
+      {
+       "Action": [
+        "ecs:DescribeContainerInstances",
+        "ecs:DescribeTasks"
+       ],
+       "Condition": {
+        "ArnEquals": {
+         "ecs:cluster": {
+          "Fn::GetAtt": [
+           "ParakeetClusterA1338BEA",
+           "Arn"
+          ]
+         }
+        }
+       },
+       "Effect": "Allow",
+       "Resource": "*"
+      },
+      {
+       "Action": [
+        "ecs:ListContainerInstances",
+        "ecs:SubmitContainerStateChange",
+        "ecs:SubmitTaskStateChange"
+       ],
+       "Effect": "Allow",
+       "Resource": {
+        "Fn::GetAtt": [
+         "ParakeetClusterA1338BEA",
+         "Arn"
+        ]
+       }
+      },
+      {
+       "Action": [
+        "ecs:UpdateContainerInstancesState",
+        "ecs:ListTasks"
+       ],
+       "Condition": {
+        "ArnEquals": {
+         "ecs:cluster": {
+          "Fn::GetAtt": [
+           "ParakeetClusterA1338BEA",
+           "Arn"
+          ]
+         }
+        }
+       },
+       "Effect": "Allow",
+       "Resource": "*"
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicyED7A22CB",
+    "Roles": [
+     {
+      "Ref": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRole6F214989"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunction2C8F0589": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "ZipFile": "import boto3, json, os, time\n\necs = boto3.client('ecs')\nautoscaling = boto3.client('autoscaling')\n\n\ndef lambda_handler(event, context):\n  print(json.dumps(dict(event, ResponseURL='...')))\n  cluster = os.environ['CLUSTER']\n  snsTopicArn = event['Records'][0]['Sns']['TopicArn']\n  lifecycle_event = json.loads(event['Records'][0]['Sns']['Message'])\n  instance_id = lifecycle_event.get('EC2InstanceId')\n  if not instance_id:\n    print(f\"Got event without EC2InstanceId: { json.dumps(dict(event, ResponseURL='...')) }\")\n    return\n\n  instance_arn = container_instance_arn(cluster, instance_id)\n  print('Instance %s has container instance ARN %s' % (lifecycle_event['EC2InstanceId'], instance_arn))\n\n  if not instance_arn:\n    return\n\n  task_arns = container_instance_task_arns(cluster, instance_arn)\n\n  if task_arns:\n    print('Instance ARN %s has task ARNs %s' % (instance_arn, ', '.join(task_arns)))\n\n  while has_tasks(cluster, instance_arn, task_arns):\n    time.sleep(10)\n\n  try:\n    print('Terminating instance %s' % instance_id)\n    autoscaling.complete_lifecycle_action(\n        LifecycleActionResult='CONTINUE',\n        **pick(lifecycle_event, 'LifecycleHookName', 'LifecycleActionToken', 'AutoScalingGroupName'))\n  except Exception as e:\n    # Lifecycle action may have already completed.\n    print(str(e))\n\n\ndef container_instance_arn(cluster, instance_id):\n  \"\"\"Turn an instance ID into a container instance ARN.\"\"\"\n  arns = ecs.list_container_instances(cluster=cluster, filter='ec2InstanceId==' + instance_id)['containerInstanceArns']\n  if not arns:\n    return None\n  return arns[0]\n\ndef container_instance_task_arns(cluster, instance_arn):\n  \"\"\"Fetch tasks for a container instance ARN.\"\"\"\n  arns = ecs.list_tasks(cluster=cluster, containerInstance=instance_arn)['taskArns']\n  return arns\n\ndef has_tasks(cluster, instance_arn, task_arns):\n  \"\"\"Return True if the instance is running tasks for the given cluster.\"\"\"\n  instances = ecs.describe_container_instances(cluster=cluster, containerInstances=[instance_arn])['containerInstances']\n  if not instances:\n    return False\n  instance = instances[0]\n\n  if instance['status'] == 'ACTIVE':\n    # Start draining, then try again later\n    set_container_instance_to_draining(cluster, instance_arn)\n    return True\n\n  task_count = None\n\n  if task_arns:\n    # Fetch details for tasks running on the container instance\n    tasks = ecs.describe_tasks(cluster=cluster, tasks=task_arns)['tasks']\n    if tasks:\n      # Consider any non-stopped tasks as running\n      task_count = sum(task['lastStatus'] != 'STOPPED' for task in tasks) + instance['pendingTasksCount']\n\n  if not task_count:\n    # Fallback to instance task counts if detailed task information is unavailable\n    task_count = instance['runningTasksCount'] + instance['pendingTasksCount']\n\n  print('Instance %s has %s tasks' % (instance_arn, task_count))\n\n  return task_count > 0\n\ndef set_container_instance_to_draining(cluster, instance_arn):\n  ecs.update_container_instances_state(\n      cluster=cluster,\n      containerInstances=[instance_arn], status='DRAINING')\n\n\ndef pick(dct, *keys):\n  \"\"\"Pick a subset of a dict.\"\"\"\n  return {k: v for k, v in dct.items() if k in keys}\n"
+    },
+    "Environment": {
+     "Variables": {
+      "CLUSTER": {
+       "Ref": "ParakeetClusterA1338BEA"
+      }
+     }
+    },
+    "Handler": "index.lambda_handler",
+    "Role": {
+     "Fn::GetAtt": [
+      "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRole6F214989",
+      "Arn"
+     ]
+    },
+    "Runtime": "python3.13",
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ],
+    "Timeout": 310
+   },
+   "DependsOn": [
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicyED7A22CB",
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRole6F214989"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopicEEA59BE548A8C3C1": {
+   "Type": "AWS::Lambda::Permission",
+   "Properties": {
+    "Action": "lambda:InvokeFunction",
+    "FunctionName": {
+     "Fn::GetAtt": [
+      "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunction2C8F0589",
+      "Arn"
+     ]
+    },
+    "Principal": "sns.amazonaws.com",
+    "SourceArn": {
+     "Ref": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/AllowInvoke:ParakeetPocStackParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopicEEA59BE5"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionTopicF3D41808": {
+   "Type": "AWS::SNS::Subscription",
+   "Properties": {
+    "Endpoint": {
+     "Fn::GetAtt": [
+      "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunction2C8F0589",
+      "Arn"
+     ]
+    },
+    "Protocol": "lambda",
+    "TopicArn": {
+     "Ref": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/Topic/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E": {
+   "Type": "AWS::SNS::Topic",
+   "Properties": {
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Topic/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRole1875440F": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "autoscaling.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Role/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRoleDefaultPolicyB2F179C6": {
+   "Type": "AWS::IAM::Policy",
+   "Properties": {
+    "PolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sns:Publish",
+       "Effect": "Allow",
+       "Resource": {
+        "Ref": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "PolicyName": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRoleDefaultPolicyB2F179C6",
+    "Roles": [
+     {
+      "Ref": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRole1875440F"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource"
+   }
+  },
+  "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHook33449033": {
+   "Type": "AWS::AutoScaling::LifecycleHook",
+   "Properties": {
+    "AutoScalingGroupName": {
+     "Ref": "ParakeetClusterNoChunkGpuCapacityASG918B7BA5"
+    },
+    "DefaultResult": "CONTINUE",
+    "HeartbeatTimeout": 300,
+    "LifecycleTransition": "autoscaling:EC2_INSTANCE_TERMINATING",
+    "NotificationTargetARN": {
+     "Ref": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E"
+    },
+    "RoleARN": {
+     "Fn::GetAtt": [
+      "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRole1875440F",
+      "Arn"
+     ]
+    }
+   },
+   "DependsOn": [
+    "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRoleDefaultPolicyB2F179C6",
+    "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRole1875440F"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Resource"
    }
   },
   "ParakeetLogs925D2196": {
@@ -1144,7 +1716,24 @@
     "aws:cdk:path": "ParakeetPocStack/TaskRole/DefaultPolicy/Resource"
    }
   },
-  "ParakeetTaskA8252B59": {
+  "LambdaSecurityGroup0BD9FC99": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "Security group for Lambda",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow all outbound traffic by default",
+      "IpProtocol": "-1"
+     }
+    ],
+    "VpcId": "vpc-0d6c5654761cfd6fd"
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/LambdaSecurityGroup/Resource"
+   }
+  },
+  "StandardTask90CCEC3F": {
    "Type": "AWS::ECS::TaskDefinition",
    "Properties": {
     "ContainerDefinitions": [
@@ -1152,13 +1741,13 @@
       "Command": [
        "bash",
        "-c",
-       "pip install boto3 && aws s3 cp s3://${S3_BUCKET}/scripts/transcribe.py /tmp/transcribe.py && python /tmp/transcribe.py"
+       "pip install boto3 grpcio grpcio-tools && aws s3 cp s3://${S3_BUCKET}/scripts/transcribe_grpc.py /tmp/transcribe_grpc.py && aws s3 cp s3://${S3_BUCKET}/scripts/transcribe.proto /tmp/transcribe.proto && python -m grpc_tools.protoc -I/tmp --python_out=/tmp --grpc_python_out=/tmp /tmp/transcribe.proto && cd /tmp && python transcribe_grpc.py"
       ],
-      "Cpu": 4096,
+      "Cpu": 3072,
       "Environment": [
        {
         "Name": "PARAKEET_MODEL",
-        "Value": "nvidia/parakeet-rnnt-1.1b"
+        "Value": "nvidia/parakeet-ctc-0.6b"
        },
        {
         "Name": "S3_BUCKET",
@@ -1171,12 +1760,20 @@
         "Value": "us-east-1"
        },
        {
-        "Name": "PORT",
-        "Value": "8080"
+        "Name": "GRPC_PORT",
+        "Value": "50051"
        },
        {
         "Name": "PYTORCH_CUDA_ALLOC_CONF",
         "Value": "expandable_segments:True"
+       },
+       {
+        "Name": "CHUNK_DURATION",
+        "Value": "30"
+       },
+       {
+        "Name": "MAX_AUDIO_DURATION_MINUTES",
+        "Value": "60"
        },
        {
         "Name": "AWS_REGION",
@@ -1184,22 +1781,26 @@
        }
       ],
       "Essential": true,
-      "Image": "nvcr.io/nvidia/nemo:24.05",
+      "Image": "nvcr.io/nvidia/nemo:24.09",
+      "LinuxParameters": {
+       "Capabilities": {},
+       "SharedMemorySize": 2048
+      },
       "LogConfiguration": {
        "LogDriver": "awslogs",
        "Options": {
         "awslogs-group": {
          "Ref": "ParakeetLogs925D2196"
         },
-        "awslogs-stream-prefix": "parakeet",
+        "awslogs-stream-prefix": "parakeet-standard",
         "awslogs-region": "us-east-1"
        }
       },
-      "Memory": 15360,
+      "Memory": 14336,
       "Name": "parakeet",
       "PortMappings": [
        {
-        "ContainerPort": 8080,
+        "ContainerPort": 50051,
         "Protocol": "tcp"
        }
       ],
@@ -1207,6 +1808,18 @@
        {
         "Type": "GPU",
         "Value": "1"
+       }
+      ],
+      "Ulimits": [
+       {
+        "HardLimit": -1,
+        "Name": "memlock",
+        "SoftLimit": -1
+       },
+       {
+        "HardLimit": 67108864,
+        "Name": "stack",
+        "SoftLimit": 67108864
        }
       ]
      }
@@ -1217,7 +1830,7 @@
       "Arn"
      ]
     },
-    "Family": "parakeet-transcription",
+    "Family": "parakeet-standard",
     "NetworkMode": "awsvpc",
     "RequiresCompatibilities": [
      "EC2"
@@ -1230,54 +1843,13 @@
     }
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetTask/Resource"
+    "aws:cdk:path": "ParakeetPocStack/StandardTask/Resource"
    }
   },
-  "ServiceSecurityGroup61DE1A49": {
+  "StandardServiceSG6FB2797A": {
    "Type": "AWS::EC2::SecurityGroup",
    "Properties": {
-    "GroupDescription": "Security group for Parakeet ECS service",
-    "SecurityGroupEgress": [
-     {
-      "CidrIp": "0.0.0.0/0",
-      "Description": "Allow all outbound traffic by default",
-      "IpProtocol": "-1"
-     }
-    ],
-    "VpcId": "vpc-0d6c5654761cfd6fd"
-   },
-   "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ServiceSecurityGroup/Resource"
-   }
-  },
-  "ServiceSecurityGroupfromParakeetPocStackAlbSecurityGroup72CE58AD80800DF09477": {
-   "Type": "AWS::EC2::SecurityGroupIngress",
-   "Properties": {
-    "Description": "Allow from ALB",
-    "FromPort": 8080,
-    "GroupId": {
-     "Fn::GetAtt": [
-      "ServiceSecurityGroup61DE1A49",
-      "GroupId"
-     ]
-    },
-    "IpProtocol": "tcp",
-    "SourceSecurityGroupId": {
-     "Fn::GetAtt": [
-      "AlbSecurityGroup86A59E99",
-      "GroupId"
-     ]
-    },
-    "ToPort": 8080
-   },
-   "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ServiceSecurityGroup/from ParakeetPocStackAlbSecurityGroup72CE58AD:8080"
-   }
-  },
-  "AlbSecurityGroup86A59E99": {
-   "Type": "AWS::EC2::SecurityGroup",
-   "Properties": {
-    "GroupDescription": "Security group for ALB",
+    "GroupDescription": "Security group for Parakeet standard gRPC service",
     "SecurityGroupEgress": [
      {
       "CidrIp": "0.0.0.0/0",
@@ -1287,97 +1859,61 @@
     ],
     "SecurityGroupIngress": [
      {
-      "CidrIp": "0.0.0.0/0",
-      "Description": "Allow from anyone on port 80",
-      "FromPort": 80,
+      "CidrIp": "10.0.0.0/16",
+      "Description": "Allow gRPC from VPC (NLB + Lambda)",
+      "FromPort": 50051,
       "IpProtocol": "tcp",
-      "ToPort": 80
+      "ToPort": 50051
      }
     ],
     "VpcId": "vpc-0d6c5654761cfd6fd"
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/AlbSecurityGroup/Resource"
+    "aws:cdk:path": "ParakeetPocStack/StandardServiceSG/Resource"
    }
   },
-  "AlbSecurityGroupfromParakeetPocStackLambdaSecurityGroup5DD7B5FD80A724DD57": {
-   "Type": "AWS::EC2::SecurityGroupIngress",
-   "Properties": {
-    "Description": "Allow from Lambda",
-    "FromPort": 80,
-    "GroupId": {
-     "Fn::GetAtt": [
-      "AlbSecurityGroup86A59E99",
-      "GroupId"
-     ]
-    },
-    "IpProtocol": "tcp",
-    "SourceSecurityGroupId": {
-     "Fn::GetAtt": [
-      "LambdaSecurityGroup0BD9FC99",
-      "GroupId"
-     ]
-    },
-    "ToPort": 80
-   },
-   "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/AlbSecurityGroup/from ParakeetPocStackLambdaSecurityGroup5DD7B5FD:80"
-   }
-  },
-  "ParakeetAlb13F4374F": {
+  "StandardNlb167075CA": {
    "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
    "Properties": {
     "LoadBalancerAttributes": [
      {
       "Key": "deletion_protection.enabled",
       "Value": "false"
-     },
-     {
-      "Key": "idle_timeout.timeout_seconds",
-      "Value": "900"
      }
     ],
     "Scheme": "internal",
-    "SecurityGroups": [
-     {
-      "Fn::GetAtt": [
-       "AlbSecurityGroup86A59E99",
-       "GroupId"
-      ]
-     }
-    ],
     "Subnets": [
      "subnet-0808460014e270037",
      "subnet-0d998ba3630576b93"
     ],
-    "Type": "application"
+    "Type": "network"
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetAlb/Resource"
+    "aws:cdk:path": "ParakeetPocStack/StandardNlb/Resource"
    }
   },
-  "ParakeetAlbHttpListenerC2DB5C66": {
+  "StandardNlbStandardGrpcListener1414E17F": {
    "Type": "AWS::ElasticLoadBalancingV2::Listener",
    "Properties": {
     "DefaultActions": [
      {
       "TargetGroupArn": {
-       "Ref": "TargetGroup3D7CD9B8"
+       "Ref": "StandardTargetGroup409DAF46"
       },
       "Type": "forward"
      }
     ],
     "LoadBalancerArn": {
-     "Ref": "ParakeetAlb13F4374F"
+     "Ref": "StandardNlb167075CA"
     },
-    "Port": 80,
-    "Protocol": "HTTP"
+    "Port": 50051,
+    "Protocol": "TCP"
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetAlb/HttpListener/Resource"
+    "aws:cdk:path": "ParakeetPocStack/StandardNlb/StandardGrpcListener/Resource"
    }
   },
-  "ParakeetService637E8AF7": {
+  "StandardService1C38F290": {
    "Type": "AWS::ECS::Service",
    "Properties": {
     "Cluster": {
@@ -1399,9 +1935,9 @@
     "LoadBalancers": [
      {
       "ContainerName": "parakeet",
-      "ContainerPort": 8080,
+      "ContainerPort": 50051,
       "TargetGroupArn": {
-       "Ref": "TargetGroup3D7CD9B8"
+       "Ref": "StandardTargetGroup409DAF46"
       }
      }
     ],
@@ -1411,7 +1947,7 @@
       "SecurityGroups": [
        {
         "Fn::GetAtt": [
-         "ServiceSecurityGroup61DE1A49",
+         "StandardServiceSG6FB2797A",
          "GroupId"
         ]
        }
@@ -1424,49 +1960,172 @@
     },
     "SchedulingStrategy": "REPLICA",
     "TaskDefinition": {
-     "Ref": "ParakeetTaskA8252B59"
+     "Ref": "StandardTask90CCEC3F"
     }
    },
    "DependsOn": [
-    "ParakeetAlbHttpListenerC2DB5C66",
+    "ParakeetClusterStandardGpuCapacityASG38F4539F",
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicC0DE986E479316FF",
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunction415C73C8",
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy31E50108",
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRole9BD84AD9",
+    "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionTopic87B7D79A",
+    "ParakeetClusterStandardGpuCapacityInstanceProfileB513530C",
+    "ParakeetClusterStandardGpuCapacityInstanceRoleDefaultPolicy8BCA22A9",
+    "ParakeetClusterStandardGpuCapacityInstanceRole310ADE38",
+    "ParakeetClusterStandardGpuCapacityInstanceSecurityGroupF77FA3F0",
+    "ParakeetClusterStandardGpuCapacityLaunchConfigB259389B",
+    "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHook8A729A59",
+    "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy37289C48",
+    "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleBC0F45F7",
+    "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684",
+    "StandardNlbStandardGrpcListener1414E17F",
     "TaskRoleDefaultPolicy07FC53DE",
     "TaskRole30FC0FBB"
    ],
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/ParakeetService/Service"
+    "aws:cdk:path": "ParakeetPocStack/StandardService/Service"
    }
   },
-  "TargetGroup3D7CD9B8": {
+  "StandardTargetGroup409DAF46": {
    "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
    "Properties": {
     "HealthCheckIntervalSeconds": 30,
-    "HealthCheckPath": "/health",
-    "HealthCheckTimeoutSeconds": 10,
+    "HealthCheckProtocol": "TCP",
     "HealthyThresholdCount": 2,
-    "Port": 8080,
-    "Protocol": "HTTP",
+    "Port": 50051,
+    "Protocol": "TCP",
     "TargetGroupAttributes": [
      {
       "Key": "deregistration_delay.timeout_seconds",
       "Value": "30"
-     },
-     {
-      "Key": "stickiness.enabled",
-      "Value": "false"
      }
     ],
     "TargetType": "ip",
-    "UnhealthyThresholdCount": 5,
+    "UnhealthyThresholdCount": 10,
     "VpcId": "vpc-0d6c5654761cfd6fd"
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/TargetGroup/Resource"
+    "aws:cdk:path": "ParakeetPocStack/StandardTargetGroup/Resource"
    }
   },
-  "LambdaSecurityGroup0BD9FC99": {
+  "NoChunkTask246A825D": {
+   "Type": "AWS::ECS::TaskDefinition",
+   "Properties": {
+    "ContainerDefinitions": [
+     {
+      "Command": [
+       "bash",
+       "-c",
+       "pip install boto3 grpcio grpcio-tools && aws s3 cp s3://${S3_BUCKET}/scripts/transcribe_grpc.py /tmp/transcribe_grpc.py && aws s3 cp s3://${S3_BUCKET}/scripts/transcribe.proto /tmp/transcribe.proto && python -m grpc_tools.protoc -I/tmp --python_out=/tmp --grpc_python_out=/tmp /tmp/transcribe.proto && cd /tmp && python transcribe_grpc.py"
+      ],
+      "Cpu": 7168,
+      "Environment": [
+       {
+        "Name": "PARAKEET_MODEL",
+        "Value": "nvidia/parakeet-ctc-0.6b"
+       },
+       {
+        "Name": "S3_BUCKET",
+        "Value": {
+         "Ref": "AudioBucket96BEECBA"
+        }
+       },
+       {
+        "Name": "AWS_DEFAULT_REGION",
+        "Value": "us-east-1"
+       },
+       {
+        "Name": "GRPC_PORT",
+        "Value": "50051"
+       },
+       {
+        "Name": "PYTORCH_CUDA_ALLOC_CONF",
+        "Value": "expandable_segments:True"
+       },
+       {
+        "Name": "CHUNK_DURATION",
+        "Value": "600"
+       },
+       {
+        "Name": "MAX_AUDIO_DURATION_MINUTES",
+        "Value": "60"
+       },
+       {
+        "Name": "AWS_REGION",
+        "Value": "us-east-1"
+       }
+      ],
+      "Essential": true,
+      "Image": "nvcr.io/nvidia/nemo:24.09",
+      "LinuxParameters": {
+       "Capabilities": {},
+       "SharedMemorySize": 2048
+      },
+      "LogConfiguration": {
+       "LogDriver": "awslogs",
+       "Options": {
+        "awslogs-group": {
+         "Ref": "ParakeetLogs925D2196"
+        },
+        "awslogs-stream-prefix": "parakeet-no-chunk",
+        "awslogs-region": "us-east-1"
+       }
+      },
+      "Memory": 28672,
+      "Name": "parakeet",
+      "PortMappings": [
+       {
+        "ContainerPort": 50051,
+        "Protocol": "tcp"
+       }
+      ],
+      "ResourceRequirements": [
+       {
+        "Type": "GPU",
+        "Value": "1"
+       }
+      ],
+      "Ulimits": [
+       {
+        "HardLimit": -1,
+        "Name": "memlock",
+        "SoftLimit": -1
+       },
+       {
+        "HardLimit": 67108864,
+        "Name": "stack",
+        "SoftLimit": 67108864
+       }
+      ]
+     }
+    ],
+    "ExecutionRoleArn": {
+     "Fn::GetAtt": [
+      "TaskExecutionRole250D2532",
+      "Arn"
+     ]
+    },
+    "Family": "parakeet-no-chunk",
+    "NetworkMode": "awsvpc",
+    "RequiresCompatibilities": [
+     "EC2"
+    ],
+    "TaskRoleArn": {
+     "Fn::GetAtt": [
+      "TaskRole30FC0FBB",
+      "Arn"
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/NoChunkTask/Resource"
+   }
+  },
+  "NoChunkServiceSGD53E3B2F": {
    "Type": "AWS::EC2::SecurityGroup",
    "Properties": {
-    "GroupDescription": "Security group for Lambda",
+    "GroupDescription": "Security group for Parakeet no-chunk gRPC service",
     "SecurityGroupEgress": [
      {
       "CidrIp": "0.0.0.0/0",
@@ -1474,10 +2133,175 @@
       "IpProtocol": "-1"
      }
     ],
+    "SecurityGroupIngress": [
+     {
+      "CidrIp": "10.0.0.0/16",
+      "Description": "Allow gRPC from VPC (NLB + Lambda)",
+      "FromPort": 50051,
+      "IpProtocol": "tcp",
+      "ToPort": 50051
+     }
+    ],
     "VpcId": "vpc-0d6c5654761cfd6fd"
    },
    "Metadata": {
-    "aws:cdk:path": "ParakeetPocStack/LambdaSecurityGroup/Resource"
+    "aws:cdk:path": "ParakeetPocStack/NoChunkServiceSG/Resource"
+   }
+  },
+  "NoChunkNlb20855021": {
+   "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+   "Properties": {
+    "LoadBalancerAttributes": [
+     {
+      "Key": "deletion_protection.enabled",
+      "Value": "false"
+     }
+    ],
+    "Scheme": "internal",
+    "Subnets": [
+     "subnet-0808460014e270037",
+     "subnet-0d998ba3630576b93"
+    ],
+    "Type": "network"
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/NoChunkNlb/Resource"
+   }
+  },
+  "NoChunkNlbNoChunkGrpcListener86546CB3": {
+   "Type": "AWS::ElasticLoadBalancingV2::Listener",
+   "Properties": {
+    "DefaultActions": [
+     {
+      "TargetGroupArn": {
+       "Ref": "NoChunkTargetGroup43294511"
+      },
+      "Type": "forward"
+     }
+    ],
+    "LoadBalancerArn": {
+     "Ref": "NoChunkNlb20855021"
+    },
+    "Port": 50051,
+    "Protocol": "TCP"
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/NoChunkNlb/NoChunkGrpcListener/Resource"
+   }
+  },
+  "NoChunkService73B0E4ED": {
+   "Type": "AWS::ECS::Service",
+   "Properties": {
+    "Cluster": {
+     "Ref": "ParakeetClusterA1338BEA"
+    },
+    "DeploymentConfiguration": {
+     "Alarms": {
+      "AlarmNames": [],
+      "Enable": false,
+      "Rollback": false
+     },
+     "MaximumPercent": 200,
+     "MinimumHealthyPercent": 50
+    },
+    "DesiredCount": 1,
+    "EnableECSManagedTags": false,
+    "HealthCheckGracePeriodSeconds": 60,
+    "LaunchType": "EC2",
+    "LoadBalancers": [
+     {
+      "ContainerName": "parakeet",
+      "ContainerPort": 50051,
+      "TargetGroupArn": {
+       "Ref": "NoChunkTargetGroup43294511"
+      }
+     }
+    ],
+    "NetworkConfiguration": {
+     "AwsvpcConfiguration": {
+      "AssignPublicIp": "DISABLED",
+      "SecurityGroups": [
+       {
+        "Fn::GetAtt": [
+         "NoChunkServiceSGD53E3B2F",
+         "GroupId"
+        ]
+       }
+      ],
+      "Subnets": [
+       "subnet-0808460014e270037",
+       "subnet-0d998ba3630576b93"
+      ]
+     }
+    },
+    "SchedulingStrategy": "REPLICA",
+    "TaskDefinition": {
+     "Ref": "NoChunkTask246A825D"
+    }
+   },
+   "DependsOn": [
+    "NoChunkNlbNoChunkGrpcListener86546CB3",
+    "ParakeetClusterNoChunkGpuCapacityASG918B7BA5",
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopicEEA59BE548A8C3C1",
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunction2C8F0589",
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicyED7A22CB",
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRole6F214989",
+    "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionTopicF3D41808",
+    "ParakeetClusterNoChunkGpuCapacityInstanceProfileD1ED28E7",
+    "ParakeetClusterNoChunkGpuCapacityInstanceRoleDefaultPolicyB7A20078",
+    "ParakeetClusterNoChunkGpuCapacityInstanceRole6F08823E",
+    "ParakeetClusterNoChunkGpuCapacityInstanceSecurityGroup6F192AD1",
+    "ParakeetClusterNoChunkGpuCapacityLaunchConfig57B7F268",
+    "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHook33449033",
+    "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRoleDefaultPolicyB2F179C6",
+    "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRole1875440F",
+    "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E",
+    "TaskRoleDefaultPolicy07FC53DE",
+    "TaskRole30FC0FBB"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/NoChunkService/Service"
+   }
+  },
+  "NoChunkTargetGroup43294511": {
+   "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+   "Properties": {
+    "HealthCheckIntervalSeconds": 30,
+    "HealthCheckProtocol": "TCP",
+    "HealthyThresholdCount": 2,
+    "Port": 50051,
+    "Protocol": "TCP",
+    "TargetGroupAttributes": [
+     {
+      "Key": "deregistration_delay.timeout_seconds",
+      "Value": "30"
+     }
+    ],
+    "TargetType": "ip",
+    "UnhealthyThresholdCount": 10,
+    "VpcId": "vpc-0d6c5654761cfd6fd"
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/NoChunkTargetGroup/Resource"
+   }
+  },
+  "GrpcLayer9769C953": {
+   "Type": "AWS::Lambda::LayerVersion",
+   "Properties": {
+    "CompatibleRuntimes": [
+     "python3.12"
+    ],
+    "Content": {
+     "S3Bucket": "cdk-hnb659fds-assets-234937851863-us-east-1",
+     "S3Key": "3ff2fa76bce86da05313e30cc532298a0f669d25427e0551f48197ab770b612b.zip"
+    },
+    "Description": "gRPC and protobuf dependencies for Lambda"
+   },
+   "Metadata": {
+    "aws:cdk:path": "ParakeetPocStack/GrpcLayer/Resource",
+    "aws:asset:path": "asset.3ff2fa76bce86da05313e30cc532298a0f669d25427e0551f48197ab770b612b",
+    "aws:asset:is-bundled": false,
+    "aws:asset:property": "Content"
    }
   },
   "TriggerLambdaServiceRole094F0859": {
@@ -1531,30 +2355,38 @@
    "Properties": {
     "Code": {
      "S3Bucket": "cdk-hnb659fds-assets-234937851863-us-east-1",
-     "S3Key": "10628cb7193700199a9dd72a3ef52ee2daa231055bfd29545b0e639565541a90.zip"
+     "S3Key": "b5c30f8505aee90beb55affda32c785281a7041129a7298d35f4830cfd8d5be1.zip"
     },
     "Environment": {
      "Variables": {
-      "SERVICE_URL": {
-       "Fn::Join": [
-        "",
-        [
-         "http://",
-         {
-          "Fn::GetAtt": [
-           "ParakeetAlb13F4374F",
-           "DNSName"
-          ]
-         }
-        ]
+      "STANDARD_SERVICE_HOST": {
+       "Fn::GetAtt": [
+        "StandardNlb167075CA",
+        "DNSName"
        ]
       },
+      "STANDARD_SERVICE_PORT": "50051",
+      "NO_CHUNK_SERVICE_HOST": {
+       "Fn::GetAtt": [
+        "NoChunkNlb20855021",
+        "DNSName"
+       ]
+      },
+      "NO_CHUNK_SERVICE_PORT": "50051",
       "S3_BUCKET": {
        "Ref": "AudioBucket96BEECBA"
-      }
+      },
+      "STANDARD_PREFIX": "input/",
+      "NO_CHUNK_PREFIX": "input-nochunk/"
      }
     },
-    "Handler": "index.handler",
+    "Handler": "index_grpc.handler",
+    "Layers": [
+     {
+      "Ref": "GrpcLayer9769C953"
+     }
+    ],
+    "MemorySize": 256,
     "Role": {
      "Fn::GetAtt": [
       "TriggerLambdaServiceRole094F0859",
@@ -1583,7 +2415,7 @@
    ],
    "Metadata": {
     "aws:cdk:path": "ParakeetPocStack/TriggerLambda/Resource",
-    "aws:asset:path": "asset.10628cb7193700199a9dd72a3ef52ee2daa231055bfd29545b0e639565541a90",
+    "aws:asset:path": "asset.b5c30f8505aee90beb55affda32c785281a7041129a7298d35f4830cfd8d5be1",
     "aws:asset:is-bundled": false,
     "aws:asset:property": "Code"
    }
@@ -1679,7 +2511,7 @@
   "CDKMetadata": {
    "Type": "AWS::CDK::Metadata",
    "Properties": {
-    "Analytics": "v2:deflate64:H4sIAAAAAAAA/31T227bMAz9lr472ubsB5J0WwsEaBAHew0UmfFYy5IhSikMw/8+yrc4K7AnHd6kQ/IoFek6Fd+e5AetVF6uNF5Em3mpyuQIZINTkHDs3NJatNugSvDJ7mpGNBwHq1E1d/doD8ZWEnSJltUll6LlnAO4ConQmlixlw243+B6O0NTaPDW/AxG+eiZAadOuEtofW5zqLVtKjBeDA89z45EEoEnsYlHl6CsRHu0GuIl/XknfEevhrw0Cg7OXlEzZVDEfHUgDy4mTPCHSk+Syme4osGJ278ea7xEA27h47oM3A1Vz2OEXSKDt6Sk5tZFu2EjG4xfzoZ6mBD3/YdvvGIRnJxe/JS6xyuoRml4sbbsC5eO2E/KmwUVHPpmvv3/jldTOCDiiRseRhYupBzWE4UH+2RrVP0oIuCN24JL9nbRyIiZipbkUWkr84vUPHVu4sbsNnXN6+hb3HNs28eG6T/YyzzkpZgxZ8KL+Em6AvzMYWF2XbLjjdpq1nmUx4wfQiyKG+bgopiTXlb8RQpmPQr7rKOMz/xRlEax+aCdxl7ZvcakkxWMKnoLvg4sSmNzEO/05ZZ+F2vx9emdEFcuGI8ViONw/gUwXzxanAMAAA=="
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/2VT27LaMAz8lvNu3Db0B4DT20ymZYDpK2McJdWJYzOWDWUy+ffKuQE9T16tZWkjbTKZLTP56UVdaaGLemHwJNt9ULoWOyAXvQbBd8eWlrJdR11DEJvSjmg4ts6gvt3pMR6CtSLohFHNqVCy5Zwt+AaJ0Nn0Ilc38L/B9/EebWUgOPs1Wh0SMwNOnfHjm07Q8tgWcDbu1oANcuj6OhNCEUEguUpHJ1A1st05A6lif97V39EPS0FZDVvvSjSsHzSxeBMpgE8JE/yis4Oi+hVKtDgJ/Z9xNii04B+4HG38u1VeNcBlKNXZg7+g7nWNsBMqBkdaGZ6LbFcc7Ifgm3fxPIyPh/KHO5RYRa8mBe9ScyxB37SB787V/cNHIn1fxmsHHT2G21z9ieBJWx7CPp5IezxPrZ7igzuj7keQAK/dVfwkdw+CR8wtjaKA2jhVnJThabPYC6v4CeHqfJ0zv+75YeJP8ZSDvAQ73k94vDsoX0GY+z6EXSc2vD3XzAZPVpjx0xUb4IIF+ORi0VuI/42KlY6OPprkxSP/IdqgXF1pY7C3Z++nab8p+BXDObIBrStAvtGHS/ZZLuXHlzdCXPhoAzYgd8P5D7AkUlKVAwAA"
    },
    "Metadata": {
     "aws:cdk:path": "ParakeetPocStack/CDKMetadata/Default"
@@ -1703,23 +2535,17 @@
     "Ref": "AudioBucket96BEECBA"
    }
   },
-  "ServiceUrl": {
+  "StandardServiceHost": {
+   "Description": "Standard gRPC service (30s chunks, up to 60 min audio)",
    "Value": {
-    "Fn::Join": [
-     "",
-     [
-      "http://",
-      {
-       "Fn::GetAtt": [
-        "ParakeetAlb13F4374F",
-        "DNSName"
-       ]
-      }
-     ]
+    "Fn::GetAtt": [
+     "StandardNlb167075CA",
+     "DNSName"
     ]
    }
   },
-  "UploadCommand": {
+  "StandardUploadCommand": {
+   "Description": "Upload to standard processing",
    "Value": {
     "Fn::Join": [
      "",
@@ -1729,6 +2555,30 @@
        "Ref": "AudioBucket96BEECBA"
       },
       "/input/"
+     ]
+    ]
+   }
+  },
+  "NoChunkServiceHost": {
+   "Description": "No-chunk gRPC service (experimental, up to 60 min audio)",
+   "Value": {
+    "Fn::GetAtt": [
+     "NoChunkNlb20855021",
+     "DNSName"
+    ]
+   }
+  },
+  "NoChunkUploadCommand": {
+   "Description": "Upload to no-chunk processing (experimental)",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "aws s3 cp your-audio.wav s3://",
+      {
+       "Ref": "AudioBucket96BEECBA"
+      },
+      "/input-nochunk/"
      ]
     ]
    }

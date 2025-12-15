@@ -18,7 +18,7 @@
         "validateOnSynth": false,
         "assumeRoleArn": "arn:${AWS::Partition}:iam::234937851863:role/cdk-hnb659fds-deploy-role-234937851863-us-east-1",
         "cloudFormationExecutionRoleArn": "arn:${AWS::Partition}:iam::234937851863:role/cdk-hnb659fds-cfn-exec-role-234937851863-us-east-1",
-        "stackTemplateAssetObjectUrl": "s3://cdk-hnb659fds-assets-234937851863-us-east-1/4289a0f583c0ef2084712bdee788fad9692b15dde3e6cef306b388a61d158a42.json",
+        "stackTemplateAssetObjectUrl": "s3://cdk-hnb659fds-assets-234937851863-us-east-1/347508af9e6eee8b4e684325305f7c23055eaa2ae0e7232dd15f48e18dad785e.json",
         "requiresBootstrapStackVersion": 6,
         "bootstrapStackVersionSsmParameter": "/cdk-bootstrap/hnb659fds/version",
         "additionalDependencies": [
@@ -135,7 +135,8 @@
               "WrappedClass.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/metadata-resource.js:1:2200)",
               "WrappedClass.addCapacity (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/cluster.js:1:21017)",
               "WrappedClass.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/metadata-resource.js:1:2200)",
-              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:48:38)",
+              "ParakeetPocStack.createParakeetService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:238:38)",
+              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:112:34)",
               "Object.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/bin/parakeet-poc.ts:8:1)",
               "Module._compile (node:internal/modules/cjs/loader:1692:14)",
               "Module.m._compile (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1618:23)",
@@ -167,7 +168,7 @@
             "data": "ParakeetClusterA1338BEA"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity": [
           {
             "type": "aws:cdk:warning",
             "data": "desiredCapacity has been configured. Be aware this will reset the size of your AutoScalingGroup on every deployment. See https://github.com/aws/aws-cdk/issues/5215 [ack: @aws-cdk/aws-autoscaling:desiredCapacitySet]",
@@ -178,7 +179,8 @@
               "new AutoScalingGroup2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:681)",
               "WrappedClass.addCapacity (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/cluster.js:1:20820)",
               "WrappedClass.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/metadata-resource.js:1:2200)",
-              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:48:38)",
+              "ParakeetPocStack.createParakeetService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:238:38)",
+              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:112:34)",
               "Object.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/bin/parakeet-poc.ts:8:1)",
               "Module._compile (node:internal/modules/cjs/loader:1692:14)",
               "Module.m._compile (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1618:23)",
@@ -204,100 +206,222 @@
             ]
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceSecurityGroup/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceSecurityGroup/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityInstanceSecurityGroupF2AB68CA"
+            "data": "ParakeetClusterStandardGpuCapacityInstanceSecurityGroupF77FA3F0"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceRole/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceRole/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityInstanceRole993C7F50"
+            "data": "ParakeetClusterStandardGpuCapacityInstanceRole310ADE38"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceRole/DefaultPolicy/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceRole/DefaultPolicy/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityInstanceRoleDefaultPolicyAF98BA0C"
+            "data": "ParakeetClusterStandardGpuCapacityInstanceRoleDefaultPolicy8BCA22A9"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/InstanceProfile": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/InstanceProfile": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityInstanceProfileD1118825"
+            "data": "ParakeetClusterStandardGpuCapacityInstanceProfileB513530C"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/LaunchConfig": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LaunchConfig": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityLaunchConfig1FD36DB1"
+            "data": "ParakeetClusterStandardGpuCapacityLaunchConfigB259389B"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/ASG": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/ASG": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityASG85D32FB0"
+            "data": "ParakeetClusterStandardGpuCapacityASG38F4539F"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/ServiceRole/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/ServiceRole/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRole0EAEB262"
+            "data": "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRole9BD84AD9"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy722E52CF"
+            "data": "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicy31E50108"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityDrainECSHookFunctionCDE7372A"
+            "data": "ParakeetClusterStandardGpuCapacityDrainECSHookFunction415C73C8"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/AllowInvoke:ParakeetPocStackParakeetClusterGpuCapacityLifecycleHookDrainHookTopic7B1CAC9F": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/AllowInvoke:ParakeetPocStackParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicC0DE986E": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterGpuCapacityLifecycleHookDrainHookTopic7B1CAC9FA4130571"
+            "data": "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicC0DE986E479316FF"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/DrainECSHook/Function/Topic/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/DrainECSHook/Function/Topic/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityDrainECSHookFunctionTopic72B62574"
+            "data": "ParakeetClusterStandardGpuCapacityDrainECSHookFunctionTopic87B7D79A"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Topic/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Topic/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityLifecycleHookDrainHookTopic1F8E29F5"
+            "data": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookTopicBA747684"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Role/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Role/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityLifecycleHookDrainHookRole0D156CA3"
+            "data": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleBC0F45F7"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy7FB050C6"
+            "data": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHookRoleDefaultPolicy37289C48"
           }
         ],
-        "/ParakeetPocStack/ParakeetCluster/GpuCapacity/LifecycleHookDrainHook/Resource": [
+        "/ParakeetPocStack/ParakeetCluster/StandardGpuCapacity/LifecycleHookDrainHook/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetClusterGpuCapacityLifecycleHookDrainHook4B725F90"
+            "data": "ParakeetClusterStandardGpuCapacityLifecycleHookDrainHook8A729A59"
           }
         ],
-        "/ParakeetPocStack/SsmParameterValue:--aws--service--ecs--optimized-ami--amazon-linux-2--gpu--recommended--image_id:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter": [
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity": [
+          {
+            "type": "aws:cdk:warning",
+            "data": "desiredCapacity has been configured. Be aware this will reset the size of your AutoScalingGroup on every deployment. See https://github.com/aws/aws-cdk/issues/5215 [ack: @aws-cdk/aws-autoscaling:desiredCapacitySet]",
+            "trace": [
+              "Annotations.addMessage (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/annotations.js:1:2066)",
+              "Annotations.addWarningV2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/annotations.js:1:984)",
+              "new AutoScalingGroup2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-autoscaling/lib/auto-scaling-group.js:1:23555)",
+              "new AutoScalingGroup2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:681)",
+              "WrappedClass.addCapacity (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/cluster.js:1:20820)",
+              "WrappedClass.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/metadata-resource.js:1:2200)",
+              "ParakeetPocStack.createParakeetService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:238:38)",
+              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:118:33)",
+              "Object.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/bin/parakeet-poc.ts:8:1)",
+              "Module._compile (node:internal/modules/cjs/loader:1692:14)",
+              "Module.m._compile (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1618:23)",
+              "node:internal/modules/cjs/loader:1824:10",
+              "Object.require.extensions.<computed> [as .ts] (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1621:12)",
+              "Module.load (node:internal/modules/cjs/loader:1427:32)",
+              "Module._load (node:internal/modules/cjs/loader:1250:12)",
+              "TracingChannel.traceSync (node:diagnostics_channel:322:14)",
+              "wrapModuleLoad (node:internal/modules/cjs/loader:235:24)",
+              "Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:152:5)",
+              "phase4 (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:649:14)",
+              "bootstrap (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:95:10)",
+              "main (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:55:10)",
+              "Object.<anonymous> (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:800:3)",
+              "Module._compile (node:internal/modules/cjs/loader:1692:14)",
+              "Object.<anonymous> (node:internal/modules/cjs/loader:1824:10)",
+              "Module.load (node:internal/modules/cjs/loader:1427:32)",
+              "Module._load (node:internal/modules/cjs/loader:1250:12)",
+              "TracingChannel.traceSync (node:diagnostics_channel:322:14)",
+              "wrapModuleLoad (node:internal/modules/cjs/loader:235:24)",
+              "Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:152:5)",
+              "node:internal/main/run_main_module:33:47"
+            ]
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceSecurityGroup/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "SsmParameterValueawsserviceecsoptimizedamiamazonlinux2gpurecommendedimageidC96584B6F00A464EAD1953AFF4B05118Parameter"
+            "data": "ParakeetClusterNoChunkGpuCapacityInstanceSecurityGroup6F192AD1"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceRole/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityInstanceRole6F08823E"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceRole/DefaultPolicy/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityInstanceRoleDefaultPolicyB7A20078"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/InstanceProfile": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityInstanceProfileD1ED28E7"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LaunchConfig": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityLaunchConfig57B7F268"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/ASG": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityASG918B7BA5"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/ServiceRole/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRole6F214989"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/ServiceRole/DefaultPolicy/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionServiceRoleDefaultPolicyED7A22CB"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunction2C8F0589"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/AllowInvoke:ParakeetPocStackParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopicEEA59BE5": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionAllowInvokeParakeetPocStackParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopicEEA59BE548A8C3C1"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/DrainECSHook/Function/Topic/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityDrainECSHookFunctionTopicF3D41808"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Topic/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookTopic627F438E"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Role/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRole1875440F"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Role/DefaultPolicy/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHookRoleDefaultPolicyB2F179C6"
+          }
+        ],
+        "/ParakeetPocStack/ParakeetCluster/NoChunkGpuCapacity/LifecycleHookDrainHook/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "ParakeetClusterNoChunkGpuCapacityLifecycleHookDrainHook33449033"
           }
         ],
         "/ParakeetPocStack/ParakeetLogs/Resource": [
@@ -330,49 +454,43 @@
             "data": "TaskRoleDefaultPolicy07FC53DE"
           }
         ],
-        "/ParakeetPocStack/ParakeetTask/Resource": [
+        "/ParakeetPocStack/LambdaSecurityGroup/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetTaskA8252B59"
+            "data": "LambdaSecurityGroup0BD9FC99"
           }
         ],
-        "/ParakeetPocStack/ServiceSecurityGroup/Resource": [
+        "/ParakeetPocStack/SsmParameterValue:--aws--service--ecs--optimized-ami--amazon-linux-2--gpu--recommended--image_id:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ServiceSecurityGroup61DE1A49"
+            "data": "SsmParameterValueawsserviceecsoptimizedamiamazonlinux2gpurecommendedimageidC96584B6F00A464EAD1953AFF4B05118Parameter"
           }
         ],
-        "/ParakeetPocStack/ServiceSecurityGroup/from ParakeetPocStackAlbSecurityGroup72CE58AD:8080": [
+        "/ParakeetPocStack/StandardTask/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ServiceSecurityGroupfromParakeetPocStackAlbSecurityGroup72CE58AD80800DF09477"
+            "data": "StandardTask90CCEC3F"
           }
         ],
-        "/ParakeetPocStack/AlbSecurityGroup/Resource": [
+        "/ParakeetPocStack/StandardServiceSG/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "AlbSecurityGroup86A59E99"
+            "data": "StandardServiceSG6FB2797A"
           }
         ],
-        "/ParakeetPocStack/AlbSecurityGroup/from ParakeetPocStackLambdaSecurityGroup5DD7B5FD:80": [
+        "/ParakeetPocStack/StandardNlb/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "AlbSecurityGroupfromParakeetPocStackLambdaSecurityGroup5DD7B5FD80A724DD57"
+            "data": "StandardNlb167075CA"
           }
         ],
-        "/ParakeetPocStack/ParakeetAlb/Resource": [
+        "/ParakeetPocStack/StandardNlb/StandardGrpcListener/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetAlb13F4374F"
+            "data": "StandardNlbStandardGrpcListener1414E17F"
           }
         ],
-        "/ParakeetPocStack/ParakeetAlb/HttpListener/Resource": [
-          {
-            "type": "aws:cdk:logicalId",
-            "data": "ParakeetAlbHttpListenerC2DB5C66"
-          }
-        ],
-        "/ParakeetPocStack/ParakeetService": [
+        "/ParakeetPocStack/StandardService": [
           {
             "type": "aws:cdk:warning",
             "data": "minHealthyPercent has not been configured so the default value of 50% is used. The number of running tasks will decrease below the desired count during deployments etc. See https://github.com/aws/aws-cdk/issues/31705 [ack: @aws-cdk/aws-ecs:minHealthyPercent]",
@@ -382,7 +500,8 @@
               "new BaseService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/base/base-service.js:1:8675)",
               "new Ec2Service2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/ec2/ec2-service.js:1:7008)",
               "new Ec2Service2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:681)",
-              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:145:21)",
+              "ParakeetPocStack.createParakeetService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:349:21)",
+              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:112:34)",
               "Object.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/bin/parakeet-poc.ts:8:1)",
               "Module._compile (node:internal/modules/cjs/loader:1692:14)",
               "Module.m._compile (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1618:23)",
@@ -408,22 +527,95 @@
             ]
           }
         ],
-        "/ParakeetPocStack/ParakeetService/Service": [
+        "/ParakeetPocStack/StandardService/Service": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ParakeetService637E8AF7"
+            "data": "StandardService1C38F290"
           }
         ],
-        "/ParakeetPocStack/TargetGroup/Resource": [
+        "/ParakeetPocStack/StandardTargetGroup/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "TargetGroup3D7CD9B8"
+            "data": "StandardTargetGroup409DAF46"
           }
         ],
-        "/ParakeetPocStack/LambdaSecurityGroup/Resource": [
+        "/ParakeetPocStack/NoChunkTask/Resource": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "LambdaSecurityGroup0BD9FC99"
+            "data": "NoChunkTask246A825D"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkServiceSG/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkServiceSGD53E3B2F"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkNlb/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkNlb20855021"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkNlb/NoChunkGrpcListener/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkNlbNoChunkGrpcListener86546CB3"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkService": [
+          {
+            "type": "aws:cdk:warning",
+            "data": "minHealthyPercent has not been configured so the default value of 50% is used. The number of running tasks will decrease below the desired count during deployments etc. See https://github.com/aws/aws-cdk/issues/31705 [ack: @aws-cdk/aws-ecs:minHealthyPercent]",
+            "trace": [
+              "Annotations.addMessage (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/annotations.js:1:2066)",
+              "Annotations.addWarningV2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/annotations.js:1:984)",
+              "new BaseService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/base/base-service.js:1:8675)",
+              "new Ec2Service2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/aws-ecs/lib/ec2/ec2-service.js:1:7008)",
+              "new Ec2Service2 (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/node_modules/aws-cdk-lib/core/lib/prop-injectable.js:1:681)",
+              "ParakeetPocStack.createParakeetService (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:349:21)",
+              "new ParakeetPocStack (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/lib/parakeet-poc-stack.ts:118:33)",
+              "Object.<anonymous> (/Users/fanhongy/Project/parakeet-poc/parakeet-poc/bin/parakeet-poc.ts:8:1)",
+              "Module._compile (node:internal/modules/cjs/loader:1692:14)",
+              "Module.m._compile (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1618:23)",
+              "node:internal/modules/cjs/loader:1824:10",
+              "Object.require.extensions.<computed> [as .ts] (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1621:12)",
+              "Module.load (node:internal/modules/cjs/loader:1427:32)",
+              "Module._load (node:internal/modules/cjs/loader:1250:12)",
+              "TracingChannel.traceSync (node:diagnostics_channel:322:14)",
+              "wrapModuleLoad (node:internal/modules/cjs/loader:235:24)",
+              "Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:152:5)",
+              "phase4 (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:649:14)",
+              "bootstrap (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:95:10)",
+              "main (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:55:10)",
+              "Object.<anonymous> (/Users/fanhongy/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/bin.ts:800:3)",
+              "Module._compile (node:internal/modules/cjs/loader:1692:14)",
+              "Object.<anonymous> (node:internal/modules/cjs/loader:1824:10)",
+              "Module.load (node:internal/modules/cjs/loader:1427:32)",
+              "Module._load (node:internal/modules/cjs/loader:1250:12)",
+              "TracingChannel.traceSync (node:diagnostics_channel:322:14)",
+              "wrapModuleLoad (node:internal/modules/cjs/loader:235:24)",
+              "Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:152:5)",
+              "node:internal/main/run_main_module:33:47"
+            ]
+          }
+        ],
+        "/ParakeetPocStack/NoChunkService/Service": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkService73B0E4ED"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkTargetGroup/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkTargetGroup43294511"
+          }
+        ],
+        "/ParakeetPocStack/GrpcLayer/Resource": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "GrpcLayer9769C953"
           }
         ],
         "/ParakeetPocStack/TriggerLambda/ServiceRole/Resource": [
@@ -462,16 +654,28 @@
             "data": "BucketName"
           }
         ],
-        "/ParakeetPocStack/ServiceUrl": [
+        "/ParakeetPocStack/StandardServiceHost": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "ServiceUrl"
+            "data": "StandardServiceHost"
           }
         ],
-        "/ParakeetPocStack/UploadCommand": [
+        "/ParakeetPocStack/StandardUploadCommand": [
           {
             "type": "aws:cdk:logicalId",
-            "data": "UploadCommand"
+            "data": "StandardUploadCommand"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkServiceHost": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkServiceHost"
+          }
+        ],
+        "/ParakeetPocStack/NoChunkUploadCommand": [
+          {
+            "type": "aws:cdk:logicalId",
+            "data": "NoChunkUploadCommand"
           }
         ],
         "/ParakeetPocStack/CDKMetadata/Default": [

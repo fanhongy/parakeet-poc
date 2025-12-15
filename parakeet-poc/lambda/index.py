@@ -4,16 +4,32 @@ import urllib.request
 import urllib.error
 
 def handler(event, context):
-    """Trigger transcription via ECS service API when audio is uploaded."""
+    """Trigger transcription via ECS service API when audio is uploaded.
     
-    service_url = os.environ['SERVICE_URL']
+    Routes to different services based on S3 prefix:
+    - input/ -> Standard service (30s chunks, up to 30 min)
+    - input-nochunk/ -> No-chunk service (experimental, up to 15 min)
+    """
+    
+    standard_url = os.environ['STANDARD_SERVICE_URL']
+    no_chunk_url = os.environ.get('NO_CHUNK_SERVICE_URL', '')
+    standard_prefix = os.environ.get('STANDARD_PREFIX', 'input/')
+    no_chunk_prefix = os.environ.get('NO_CHUNK_PREFIX', 'input-nochunk/')
     
     # Get S3 object info from event
     record = event['Records'][0]
     bucket = record['s3']['bucket']['name']
     key = record['s3']['object']['key']
     
-    print(f"Processing: s3://{bucket}/{key}")
+    # Route to appropriate service based on prefix
+    if key.startswith(no_chunk_prefix) and no_chunk_url:
+        service_url = no_chunk_url
+        service_name = 'no-chunk'
+    else:
+        service_url = standard_url
+        service_name = 'standard'
+    
+    print(f"Processing: s3://{bucket}/{key} via {service_name} service")
     
     # Call ECS service to transcribe
     url = f"{service_url}/transcribe"

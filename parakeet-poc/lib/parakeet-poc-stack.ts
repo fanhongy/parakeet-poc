@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -11,14 +12,47 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import { Construct } from 'constructs';
 
+interface ParakeetServiceConfig {
+  instanceType: string;
+  chunkDurationSeconds: number;
+  maxAudioDurationMinutes: number;
+  inputPrefix: string;
+  serviceName: string;
+}
+
 interface ParakeetPocStackProps extends cdk.StackProps {
   vpcId: string;
   parakeetModel: string;
+  // Optional: use custom ECR image instead of pulling from NVIDIA NGC
+  ecrRepoName?: string;
+  ecrImageTag?: string;
 }
 
 export class ParakeetPocStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ParakeetPocStackProps) {
     super(scope, id, props);
+
+    // Service configurations for dual-path architecture
+    const standardConfig: ParakeetServiceConfig = {
+      instanceType: 'g4dn.2xlarge',
+      chunkDurationSeconds: 30,
+      maxAudioDurationMinutes: 60,
+      inputPrefix: 'input/',
+      serviceName: 'standard',
+    };
+
+    // Long audio service with larger GPU for bigger chunks
+    // g5.2xlarge has A10G (24GB VRAM) - can handle 60s chunks safely
+    // T4 (16GB) can only handle 30s chunks due to model size (~13GB)
+    const noChunkConfig: ParakeetServiceConfig = {
+      // instanceType: 'p4de.24xlarge',  // A100 80GB
+      // instanceType: 'g4dn.2xlarge',  // T4 16GB - use 30s chunks max
+      instanceType: 'g5.2xlarge',       // A10G 24GB - can handle 60s chunks
+      chunkDurationSeconds: 60*10,         // 600s chunks (safe for A10G 24GB)
+      maxAudioDurationMinutes: 60,
+      inputPrefix: 'input-nochunk/',
+      serviceName: 'no-chunk',
+    };
 
     // Import existing VPC
     const vpc = ec2.Vpc.fromLookup(this, 'Vpc', { vpcId: props.vpcId });
@@ -30,47 +64,30 @@ export class ParakeetPocStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
-    // Upload transcribe script to S3 (deployed via CDK)
+    // Upload transcribe script and proto files to S3 (deployed via CDK)
     new s3deploy.BucketDeployment(this, 'DeployScript', {
-      sources: [s3deploy.Source.asset('./scripts')],
+      sources: [
+        s3deploy.Source.asset('./scripts'),
+        s3deploy.Source.asset('./proto'),
+      ],
       destinationBucket: bucket,
       destinationKeyPrefix: 'scripts',
     });
 
-    // ECS Cluster with GPU capacity
+    // Shared ECS Cluster
     const cluster = new ecs.Cluster(this, 'ParakeetCluster', {
       vpc,
       clusterName: 'parakeet-poc-cluster',
     });
 
-    // Add GPU EC2 capacity (g4dn.2xlarge with 1x T4 GPU - 16GB VRAM, more CPU/RAM)
-    // NeMo image is ~50GB, need larger root volume
-    const autoScalingGroup = cluster.addCapacity('GpuCapacity', {
-      instanceType: new ec2.InstanceType('g4dn.2xlarge'),
-      machineImage: ecs.EcsOptimizedImage.amazonLinux2(ecs.AmiHardwareType.GPU),
-      minCapacity: 1,
-      maxCapacity: 1,
-      desiredCapacity: 1,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      blockDevices: [
-        {
-          deviceName: '/dev/xvda',
-          volume: autoscaling.BlockDeviceVolume.ebs(100, {
-            volumeType: autoscaling.EbsDeviceVolumeType.GP3,
-            deleteOnTermination: true,
-          }),
-        },
-      ],
-    });
-
-    // CloudWatch Log Group
+    // CloudWatch Log Group (shared)
     const logGroup = new logs.LogGroup(this, 'ParakeetLogs', {
       logGroupName: '/ecs/parakeet-poc',
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // Task execution role
+    // Task execution role (shared)
     const executionRole = new iam.Role(this, 'TaskExecutionRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       managedPolicies: [
@@ -78,141 +95,294 @@ export class ParakeetPocStack extends cdk.Stack {
       ],
     });
 
-    // Task role (for S3 access)
+    // Task role for S3 access (shared)
     const taskRole = new iam.Role(this, 'TaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
     bucket.grantReadWrite(taskRole);
 
-    // ECS Task Definition for GPU (g4dn.xlarge)
-    const taskDefinition = new ecs.Ec2TaskDefinition(this, 'ParakeetTask', {
+    // Lambda security group (shared)
+    const lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
+      vpc,
+      description: 'Security group for Lambda',
+      allowAllOutbound: true,
+    });
+
+    // Create both services with gRPC
+    const standardService = this.createParakeetService(
+      standardConfig, vpc, cluster, bucket, logGroup, executionRole, taskRole, 
+      lambdaSecurityGroup, props.parakeetModel, 'Standard',
+      props.ecrRepoName, props.ecrImageTag
+    );
+
+    const noChunkService = this.createParakeetService(
+      noChunkConfig, vpc, cluster, bucket, logGroup, executionRole, taskRole,
+      lambdaSecurityGroup, props.parakeetModel, 'NoChunk',
+      props.ecrRepoName, props.ecrImageTag
+    );
+
+    // Lambda layer for gRPC dependencies
+    const grpcLayer = new lambda.LayerVersion(this, 'GrpcLayer', {
+      code: lambda.Code.fromAsset('./lambda-layer'),
+      compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
+      description: 'gRPC and protobuf dependencies for Lambda',
+    });
+
+    // Lambda to trigger transcription via gRPC (routes based on prefix)
+    const triggerLambda = new lambda.Function(this, 'TriggerLambda', {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'index_grpc.handler',
+      code: lambda.Code.fromAsset('./lambda'),
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 256,
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [lambdaSecurityGroup],
+      layers: [grpcLayer],
+      environment: {
+        STANDARD_SERVICE_HOST: standardService.nlb.loadBalancerDnsName,
+        STANDARD_SERVICE_PORT: '50051',
+        NO_CHUNK_SERVICE_HOST: noChunkService.nlb.loadBalancerDnsName,
+        NO_CHUNK_SERVICE_PORT: '50051',
+        S3_BUCKET: bucket.bucketName,
+        STANDARD_PREFIX: standardConfig.inputPrefix,
+        NO_CHUNK_PREFIX: noChunkConfig.inputPrefix,
+      },
+    });
+
+    // S3 triggers for standard audio (input/)
+    bucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(triggerLambda),
+      { prefix: standardConfig.inputPrefix, suffix: '.wav' },
+    );
+    bucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(triggerLambda),
+      { prefix: standardConfig.inputPrefix, suffix: '.mp3' },
+    );
+
+    // S3 triggers for no-chunk audio (input-nochunk/)
+    bucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(triggerLambda),
+      { prefix: noChunkConfig.inputPrefix, suffix: '.wav' },
+    );
+    bucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(triggerLambda),
+      { prefix: noChunkConfig.inputPrefix, suffix: '.mp3' },
+    );
+
+    // Outputs
+    new cdk.CfnOutput(this, 'BucketName', { value: bucket.bucketName });
+    new cdk.CfnOutput(this, 'StandardServiceHost', { 
+      value: standardService.nlb.loadBalancerDnsName,
+      description: 'Standard gRPC service (30s chunks, up to 60 min audio)',
+    });
+    new cdk.CfnOutput(this, 'StandardUploadCommand', {
+      value: `aws s3 cp your-audio.wav s3://${bucket.bucketName}/${standardConfig.inputPrefix}`,
+      description: 'Upload to standard processing',
+    });
+    new cdk.CfnOutput(this, 'NoChunkServiceHost', {
+      value: noChunkService.nlb.loadBalancerDnsName,
+      description: 'No-chunk gRPC service (experimental, up to 60 min audio)',
+    });
+    new cdk.CfnOutput(this, 'NoChunkUploadCommand', {
+      value: `aws s3 cp your-audio.wav s3://${bucket.bucketName}/${noChunkConfig.inputPrefix}`,
+      description: 'Upload to no-chunk processing (experimental)',
+    });
+  }
+
+
+  private createParakeetService(
+    config: ParakeetServiceConfig,
+    vpc: ec2.IVpc,
+    cluster: ecs.Cluster,
+    bucket: s3.Bucket,
+    logGroup: logs.LogGroup,
+    executionRole: iam.Role,
+    taskRole: iam.Role,
+    _lambdaSecurityGroup: ec2.SecurityGroup,
+    parakeetModel: string,
+    idPrefix: string,
+    ecrRepoName?: string,
+    ecrImageTag?: string,
+  ): { nlb: elbv2.NetworkLoadBalancer; service: ecs.Ec2Service } {
+    
+    // Determine memory/CPU based on instance type
+    // Sized to allow 2 tasks per instance for rolling deployments
+    const isP4d = config.instanceType.startsWith('p4d');
+    const isG5 = config.instanceType.startsWith('g5');
+    const isG4dn = config.instanceType.startsWith('g4dn');
+    
+    let memoryMiB = 15360;  // default
+    let cpu = 4096;
+    
+    if (isP4d) {
+      // p4de.24xlarge: 1152GB RAM, 96 vCPU, 8x A100 GPUs
+      // Use ~40% to allow 2 tasks
+      memoryMiB = 450 * 1024;  // 450GB (of 1152GB)
+      cpu = 40 * 1024;         // 40 vCPU (of 96)
+    } else if (isG5) {
+      // g5.4xlarge: 64GB RAM, 16 vCPU, 1x A10G GPU
+      memoryMiB = 28 * 1024;   // 28GB (of 64GB)
+      cpu = 7 * 1024;          // 7 vCPU (of 16)
+    } else if (isG4dn) {
+      // g4dn.2xlarge: 32GB RAM, 8 vCPU, 1x T4 GPU
+      memoryMiB = 14 * 1024;   // 14GB (of 32GB)
+      cpu = 3 * 1024;          // 3 vCPU (of 8)
+    }
+
+    // Add GPU EC2 capacity
+    const autoScalingGroup = cluster.addCapacity(`${idPrefix}GpuCapacity`, {
+      instanceType: new ec2.InstanceType(config.instanceType),
+      machineImage: ecs.EcsOptimizedImage.amazonLinux2(ecs.AmiHardwareType.GPU),
+      minCapacity: 2,
+      maxCapacity: 2,
+      desiredCapacity: 2,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      blockDevices: [
+        {
+          deviceName: '/dev/xvda',
+          volume: autoscaling.BlockDeviceVolume.ebs(200, {  // 200GB for large NeMo container (~15GB)
+            volumeType: autoscaling.EbsDeviceVolumeType.GP3,
+            deleteOnTermination: true,
+          }),
+        },
+      ],
+    });
+
+    // ECS Task Definition
+    const taskDefinition = new ecs.Ec2TaskDefinition(this, `${idPrefix}Task`, {
       executionRole,
       taskRole,
-      family: 'parakeet-transcription',
+      family: `parakeet-${config.serviceName}`,
       networkMode: ecs.NetworkMode.AWS_VPC,
     });
 
-    // Container with HTTP server (model stays loaded)
-    const container = taskDefinition.addContainer('parakeet', {
-      image: ecs.ContainerImage.fromRegistry('nvcr.io/nvidia/nemo:24.05'),
-      memoryLimitMiB: 15360,
-      cpu: 4096,
+    // Container image: use ECR if provided, otherwise pull from NVIDIA NGC
+    let containerImage: ecs.ContainerImage;
+    let containerCommand: string[] | undefined;
+    
+    if (ecrRepoName) {
+      // Use pre-built ECR image (faster startup, no runtime pip install)
+      const ecrRepo = ecr.Repository.fromRepositoryName(this, `${idPrefix}EcrRepo`, ecrRepoName);
+      containerImage = ecs.ContainerImage.fromEcrRepository(ecrRepo, ecrImageTag || 'latest');
+      containerCommand = undefined;  // Dockerfile has CMD
+    } else {
+      // Pull from NVIDIA NGC and install deps at runtime
+      // NeMo 24.09+ required for parakeet-*-0.6b-v2 models (use_bias parameter)
+      containerImage = ecs.ContainerImage.fromRegistry('nvcr.io/nvidia/nemo:24.09');
+      containerCommand = [
+        'bash', '-c',
+        'pip install boto3 grpcio grpcio-tools && ' +
+        'aws s3 cp s3://${S3_BUCKET}/scripts/transcribe_grpc.py /tmp/transcribe_grpc.py && ' +
+        'aws s3 cp s3://${S3_BUCKET}/scripts/transcribe.proto /tmp/transcribe.proto && ' +
+        'python -m grpc_tools.protoc -I/tmp --python_out=/tmp --grpc_python_out=/tmp /tmp/transcribe.proto && ' +
+        'cd /tmp && python transcribe_grpc.py',
+      ];
+    }
+
+    // Container with gRPC server
+    taskDefinition.addContainer('parakeet', {
+      image: containerImage,
+      memoryLimitMiB: memoryMiB,
+      cpu,
       logging: ecs.LogDrivers.awsLogs({
-        streamPrefix: 'parakeet',
+        streamPrefix: `parakeet-${config.serviceName}`,
         logGroup,
       }),
       environment: {
-        PARAKEET_MODEL: props.parakeetModel,
+        PARAKEET_MODEL: parakeetModel,
         S3_BUCKET: bucket.bucketName,
         AWS_DEFAULT_REGION: this.region!,
-        PORT: '8080',
+        GRPC_PORT: '50051',
         PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True',
+        CHUNK_DURATION: config.chunkDurationSeconds.toString(),
+        MAX_AUDIO_DURATION_MINUTES: config.maxAudioDurationMinutes.toString(),
       },
       gpuCount: 1,
-      command: [
-        'bash', '-c',
-        'pip install boto3 && aws s3 cp s3://${S3_BUCKET}/scripts/transcribe.py /tmp/transcribe.py && python /tmp/transcribe.py',
+      ...(containerCommand && { command: containerCommand }),
+      portMappings: [{ containerPort: 50051 }],
+      // NeMo recommended settings for better GPU memory handling
+      linuxParameters: new ecs.LinuxParameters(this, `${idPrefix}LinuxParams`, {
+        sharedMemorySize: 2048,  // 2GB shared memory (vs default 64MB)
+      }),
+      ulimits: [
+        {
+          name: ecs.UlimitName.MEMLOCK,
+          softLimit: -1,
+          hardLimit: -1,
+        },
+        {
+          name: ecs.UlimitName.STACK,
+          softLimit: 67108864,
+          hardLimit: 67108864,
+        },
       ],
-      portMappings: [{ containerPort: 8080 }],
     });
 
     // Security group for ECS service
-    const serviceSecurityGroup = new ec2.SecurityGroup(this, 'ServiceSecurityGroup', {
+    const serviceSecurityGroup = new ec2.SecurityGroup(this, `${idPrefix}ServiceSG`, {
       vpc,
-      description: 'Security group for Parakeet ECS service',
+      description: `Security group for Parakeet ${config.serviceName} gRPC service`,
       allowAllOutbound: true,
     });
 
-    // ALB Security group (only Lambda can access)
-    const albSecurityGroup = new ec2.SecurityGroup(this, 'AlbSecurityGroup', {
-      vpc,
-      description: 'Security group for ALB',
-      allowAllOutbound: true,
-    });
-    // Lambda SG will be added below after Lambda is created
-    serviceSecurityGroup.addIngressRule(albSecurityGroup, ec2.Port.tcp(8080), 'Allow from ALB');
+    // NLB doesn't have security groups - traffic comes from NLB IPs in VPC
+    // Allow gRPC traffic from anywhere in VPC (NLB health checks + Lambda via NLB)
+    serviceSecurityGroup.addIngressRule(
+      ec2.Peer.ipv4(vpc.vpcCidrBlock),
+      ec2.Port.tcp(50051), 
+      'Allow gRPC from VPC (NLB + Lambda)'
+    );
 
-    // Internal ALB (Lambda in VPC will call this)
-    const alb = new elbv2.ApplicationLoadBalancer(this, 'ParakeetAlb', {
+    // Internal NLB for gRPC (better performance than ALB for gRPC)
+    const nlb = new elbv2.NetworkLoadBalancer(this, `${idPrefix}Nlb`, {
       vpc,
       internetFacing: false,
-      securityGroup: albSecurityGroup,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      idleTimeout: cdk.Duration.seconds(900), // 15 min to match Lambda timeout
     });
 
-    // ECS Service (always running)
-    const service = new ecs.Ec2Service(this, 'ParakeetService', {
+    // ECS Service - depends on ASG to ensure instance is ready
+    const service = new ecs.Ec2Service(this, `${idPrefix}Service`, {
       cluster,
       taskDefinition,
       desiredCount: 1,
       securityGroups: [serviceSecurityGroup],
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
     });
+    
+    // Ensure EC2 instance is provisioned before ECS service tries to place tasks
+    service.node.addDependency(autoScalingGroup);
 
-    // Target group with long timeout for transcription
-    const targetGroup = new elbv2.ApplicationTargetGroup(this, 'TargetGroup', {
+    // Target group for gRPC (TCP)
+    // Model loading takes 2-5 minutes, so we need generous health check settings
+    const targetGroup = new elbv2.NetworkTargetGroup(this, `${idPrefix}TargetGroup`, {
       vpc,
-      port: 8080,
-      protocol: elbv2.ApplicationProtocol.HTTP,
-      targets: [service],
+      port: 50051,
+      protocol: elbv2.Protocol.TCP,
+      targets: [service.loadBalancerTarget({
+        containerName: 'parakeet',
+        containerPort: 50051,
+      })],
       healthCheck: {
-        path: '/health',
+        protocol: elbv2.Protocol.TCP,
         interval: cdk.Duration.seconds(30),
-        timeout: cdk.Duration.seconds(10),
         healthyThresholdCount: 2,
-        unhealthyThresholdCount: 5,
+        unhealthyThresholdCount: 10,  // Allow ~5 min for model loading (10 * 30s)
       },
       deregistrationDelay: cdk.Duration.seconds(30),
     });
 
-    // ALB listener
-    alb.addListener('HttpListener', {
-      port: 80,
+    // NLB listener for gRPC
+    nlb.addListener(`${idPrefix}GrpcListener`, {
+      port: 50051,
+      protocol: elbv2.Protocol.TCP,
       defaultTargetGroups: [targetGroup],
     });
 
-    // Lambda security group
-    const lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
-      vpc,
-      description: 'Security group for Lambda',
-      allowAllOutbound: true,
-    });
-    // Only Lambda can access the ALB
-    albSecurityGroup.addIngressRule(lambdaSecurityGroup, ec2.Port.tcp(80), 'Allow from Lambda');
-
-    // Lambda to trigger transcription via ALB
-    const triggerLambda = new lambda.Function(this, 'TriggerLambda', {
-      runtime: lambda.Runtime.PYTHON_3_12,
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset('./lambda'),
-      timeout: cdk.Duration.minutes(15),
-      vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [lambdaSecurityGroup],
-      environment: {
-        SERVICE_URL: `http://${alb.loadBalancerDnsName}`,
-        S3_BUCKET: bucket.bucketName,
-      },
-    });
-
-    // S3 trigger for audio uploads
-    bucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(triggerLambda),
-      { prefix: 'input/', suffix: '.wav' },
-    );
-    bucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new s3n.LambdaDestination(triggerLambda),
-      { prefix: 'input/', suffix: '.mp3' },
-    );
-
-    // Outputs
-    new cdk.CfnOutput(this, 'BucketName', { value: bucket.bucketName });
-    new cdk.CfnOutput(this, 'ServiceUrl', { value: `http://${alb.loadBalancerDnsName}` });
-    new cdk.CfnOutput(this, 'UploadCommand', {
-      value: `aws s3 cp your-audio.wav s3://${bucket.bucketName}/input/`,
-    });
+    return { nlb, service };
   }
 }

@@ -1,2 +1,12 @@
 node_modules
 parakeet-poc/node_modules
+parakeet-poc/.venv
+parakeet-poc/lambda-layer/python
+parakeet-poc/lambda/transcribe_pb2.py
+parakeet-poc/lambda/transcribe_pb2_grpc.py
+__pycache__
+*.pyc
+sampleaudio
+cdk.out
+parakeet-poc/cdk.out
+.DS_Store
