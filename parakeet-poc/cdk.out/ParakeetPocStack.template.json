@@ -342,7 +342,7 @@
      "cdk-hnb659fds-assets-234937851863-us-east-1"
     ],
     "SourceObjectKeys": [
-     "b8d7f4a022ca354938952651dbe5a6ba3dcd26bdd4779277abf3d6f54914947c.zip",
+     "a9ff68f23e04d4ab4d5232fc4ae523774da8573b72bb492adc3ec41d6a8ed1c4.zip",
      "bd0197aec20232be2435f78cb12449e415eed3775a2ea93684ea81d54d283bff.zip"
     ],
     "SourceMarkers": [
@@ -697,6 +697,16 @@
          ]
         }
        ]
+      },
+      {
+       "Action": "cloudwatch:PutMetricData",
+       "Condition": {
+        "StringEquals": {
+         "cloudwatch:namespace": "Parakeet/ASR"
+        }
+       },
+       "Effect": "Allow",
+       "Resource": "*"
       }
      ],
      "Version": "2012-10-17"
@@ -1344,7 +1354,7 @@
          {
           "Ref": "AWS::URLSuffix"
          },
-         "/parakeet-asr@sha256:0efbd70c735e0bf749ada6603c22836bff86b583dd4ff8a4cff11a17d2763cc8"
+         "/parakeet-asr@sha256:f618d62a4e9f680980069992d8cd95e24a24a0db1ec6d852bb7be7d560120095"
         ]
        ]
       },
@@ -2185,7 +2195,7 @@
          {
           "Ref": "AWS::URLSuffix"
          },
-         "/parakeet-asr@sha256:0efbd70c735e0bf749ada6603c22836bff86b583dd4ff8a4cff11a17d2763cc8"
+         "/parakeet-asr@sha256:f618d62a4e9f680980069992d8cd95e24a24a0db1ec6d852bb7be7d560120095"
         ]
        ]
       },
@@ -2419,13 +2429,13 @@
     ],
     "Content": {
      "S3Bucket": "cdk-hnb659fds-assets-234937851863-us-east-1",
-     "S3Key": "a692a192ed8478de5776734714e529a4dc5f84879e11200ea7676ba301c4607f.zip"
+     "S3Key": "3a451adbbd6a001f77f08c3f506b22776c5f24173a1f581e5d2433a4b5e24654.zip"
     },
     "Description": "gRPC and protobuf dependencies for Lambda"
    },
    "Metadata": {
     "aws:cdk:path": "ParakeetPocStack/GrpcLayer/Resource",
-    "aws:asset:path": "asset.a692a192ed8478de5776734714e529a4dc5f84879e11200ea7676ba301c4607f",
+    "aws:asset:path": "asset.3a451adbbd6a001f77f08c3f506b22776c5f24173a1f581e5d2433a4b5e24654",
     "aws:asset:is-bundled": false,
     "aws:asset:property": "Content"
    }

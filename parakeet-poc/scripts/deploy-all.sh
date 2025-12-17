@@ -67,9 +67,26 @@ while true; do
 done
 echo ""
 
-# Step 4: Deploy main stack
-echo ">>> Step 4/4: Deploying main Parakeet stack..."
-npx cdk deploy ParakeetPocStack --require-approval never
+# Get the image digest from ECR
+echo "Fetching image digest from ECR..."
+ECR_REPO="parakeet-asr"
+IMAGE_DIGEST=$(aws ecr describe-images \
+    --repository-name ${ECR_REPO} \
+    --image-ids imageTag=${IMAGE_TAG} \
+    --query 'imageDetails[0].imageDigest' \
+    --output text \
+    --region ${AWS_REGION})
+
+if [ -z "$IMAGE_DIGEST" ] || [ "$IMAGE_DIGEST" = "None" ]; then
+    echo "ERROR: Failed to get image digest for ${ECR_REPO}:${IMAGE_TAG}"
+    exit 1
+fi
+echo "Image digest: ${IMAGE_DIGEST}"
+echo ""
+
+# Step 4: Deploy main stack with image digest
+echo ">>> Step 4/4: Deploying main Parakeet stack with image digest..."
+npx cdk deploy ParakeetPocStack --require-approval never -c imageDigest=${IMAGE_DIGEST}
 echo ""
 
 echo "============================================"

@@ -10,6 +10,7 @@ Environment variables:
   - S3_BUCKET: S3 bucket name
   - GRPC_PORT: gRPC server port (default: 50051)
   - NUM_WORKERS: Number of worker processes (default: 2)
+  - ENABLE_EMF_METRICS: Enable CloudWatch EMF metrics (default: true)
 """
 import os
 import json
@@ -21,6 +22,7 @@ import multiprocessing as mp
 from concurrent import futures
 import grpc
 import threading
+import sys
 
 # Import generated protobuf classes
 import transcribe_pb2
@@ -31,6 +33,158 @@ CHUNK_DURATION = int(os.environ.get('CHUNK_DURATION', '30'))
 MAX_AUDIO_DURATION_MINUTES = int(os.environ.get('MAX_AUDIO_DURATION_MINUTES', '60'))
 MAX_AUDIO_DURATION_SECONDS = MAX_AUDIO_DURATION_MINUTES * 60
 NUM_WORKERS = int(os.environ.get('NUM_WORKERS', '2'))
+ENABLE_EMF_METRICS = os.environ.get('ENABLE_EMF_METRICS', 'true').lower() == 'true'
+
+
+# =============================================================================
+# CloudWatch EMF Metrics
+# =============================================================================
+
+def emit_emf_metric(namespace: str, metrics: dict, dimensions: dict, properties: dict = None):
+    """
+    Emit CloudWatch Embedded Metric Format (EMF) log.
+    
+    EMF logs are automatically parsed by CloudWatch Logs agent and converted to metrics.
+    Format: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch_Embedded_Metric_Format_Specification.html
+    """
+    if not ENABLE_EMF_METRICS:
+        return
+    
+    # Build metric definitions
+    metric_definitions = []
+    for name, value in metrics.items():
+        unit = "None"
+        if "Percent" in name or "Utilization" in name:
+            unit = "Percent"
+        elif "Seconds" in name or "Time" in name or "Duration" in name:
+            unit = "Seconds"
+        elif "Bytes" in name:
+            unit = "Bytes"
+        elif "Count" in name:
+            unit = "Count"
+        elif "GB" in name:
+            unit = "Gigabytes"
+        metric_definitions.append({"Name": name, "Unit": unit})
+    
+    # Build EMF structure
+    emf_log = {
+        "_aws": {
+            "Timestamp": int(time.time() * 1000),
+            "CloudWatchMetrics": [{
+                "Namespace": namespace,
+                "Dimensions": [list(dimensions.keys())],
+                "Metrics": metric_definitions
+            }]
+        }
+    }
+    
+    # Add dimensions and metrics as top-level keys
+    emf_log.update(dimensions)
+    emf_log.update(metrics)
+    
+    # Add optional properties (not indexed as metrics)
+    if properties:
+        emf_log.update(properties)
+    
+    # Print to stdout - CloudWatch Logs agent picks this up
+    print(json.dumps(emf_log), flush=True)
+
+
+def get_gpu_utilization() -> dict:
+    """Get current GPU utilization using nvidia-smi."""
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=utilization.gpu,utilization.memory,memory.used,memory.total',
+             '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            parts = result.stdout.strip().split(',')
+            return {
+                'gpu_util_percent': float(parts[0].strip()),
+                'memory_util_percent': float(parts[1].strip()),
+                'memory_used_mb': float(parts[2].strip()),
+                'memory_total_mb': float(parts[3].strip()),
+            }
+    except Exception:
+        pass
+    return {}
+
+
+def emit_chunk_metrics(worker_id: int, chunk_index: int, total_chunks: int,
+                       chunk_duration_audio: float, processing_time: float,
+                       model_name: str, input_key: str):
+    """Emit metrics for a single chunk processing."""
+    gpu_stats = get_gpu_utilization()
+    
+    # Calculate real-time factor (RTF): processing_time / audio_duration
+    # RTF < 1 means faster than real-time
+    rtf = processing_time / chunk_duration_audio if chunk_duration_audio > 0 else 0
+    
+    metrics = {
+        "ChunkProcessingSeconds": round(processing_time, 3),
+        "ChunkAudioSeconds": round(chunk_duration_audio, 3),
+        "RealTimeFactor": round(rtf, 3),
+    }
+    
+    # Add GPU metrics if available
+    if gpu_stats:
+        metrics["GPUUtilizationPercent"] = gpu_stats['gpu_util_percent']
+        metrics["GPUMemoryUtilizationPercent"] = gpu_stats['memory_util_percent']
+        metrics["GPUMemoryUsedMB"] = gpu_stats['memory_used_mb']
+    
+    dimensions = {
+        "ServiceType": "chunked" if total_chunks > 1 else "full-audio",
+        "WorkerId": str(worker_id),
+    }
+    
+    properties = {
+        "chunk_index": chunk_index,
+        "total_chunks": total_chunks,
+        "model": model_name,
+        "input_key": input_key,
+    }
+    
+    emit_emf_metric("Parakeet/ASR", metrics, dimensions, properties)
+
+
+def emit_request_metrics(worker_id: int, audio_duration: float, total_processing_time: float,
+                         total_chunks: int, model_name: str, input_key: str,
+                         download_time: float, prep_time: float, transcribe_time: float,
+                         gpu_peak_gb: float = 0):
+    """Emit metrics for a complete transcription request."""
+    # Overall real-time factor for the entire request
+    rtf = total_processing_time / audio_duration if audio_duration > 0 else 0
+    
+    # Throughput: audio seconds processed per wall-clock second
+    throughput = audio_duration / total_processing_time if total_processing_time > 0 else 0
+    
+    metrics = {
+        "RequestTotalSeconds": round(total_processing_time, 2),
+        "AudioDurationSeconds": round(audio_duration, 2),
+        "RequestRealTimeFactor": round(rtf, 3),
+        "ThroughputAudioPerSecond": round(throughput, 2),
+        "ChunkCount": total_chunks,
+        "DownloadSeconds": round(download_time, 2),
+        "PrepSeconds": round(prep_time, 2),
+        "TranscribeSeconds": round(transcribe_time, 2),
+    }
+    
+    if gpu_peak_gb > 0:
+        metrics["GPUPeakMemoryGB"] = round(gpu_peak_gb, 2)
+    
+    dimensions = {
+        "ServiceType": "chunked" if total_chunks > 1 else "full-audio",
+        "Model": model_name.split('/')[-1],  # Just model name without org
+    }
+    
+    properties = {
+        "worker_id": worker_id,
+        "input_key": input_key,
+        "full_model_name": model_name,
+    }
+    
+    emit_emf_metric("Parakeet/ASR", metrics, dimensions, properties)
 
 # Global manager - must be created before fork/spawn
 _manager = None
@@ -207,6 +361,7 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
         chunk_time = time.time() - chunk_start
         
         text = extract_text(result)
+        chunk_audio_duration = chunk['end_time'] - chunk['start_time']
         transcriptions.append({
             'index': chunk['index'],
             'start_time': chunk['start_time'],
@@ -214,6 +369,17 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
             'text': text,
             'processing_time': round(chunk_time, 2)
         })
+        
+        # Emit per-chunk EMF metrics
+        emit_chunk_metrics(
+            worker_id=worker_id,
+            chunk_index=i,
+            total_chunks=len(chunks),
+            chunk_duration_audio=chunk_audio_duration,
+            processing_time=chunk_time,
+            model_name=model_name,
+            input_key=input_key
+        )
         
         del result
         
@@ -229,11 +395,28 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
     print(f"[Worker {worker_id}] Transcription completed in {transcribe_time:.2f}s", flush=True)
     
     memory = {}
+    gpu_peak_gb = 0
     if torch.cuda.is_available():
+        gpu_peak_gb = torch.cuda.max_memory_allocated() / 1e9
         memory = {
-            'gpu_peak_gb': round(torch.cuda.max_memory_allocated() / 1e9, 2),
+            'gpu_peak_gb': round(gpu_peak_gb, 2),
             'gpu_total_gb': round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2),
         }
+    
+    # Emit request-level EMF metrics
+    total_time = download_time + split_time + transcribe_time
+    emit_request_metrics(
+        worker_id=worker_id,
+        audio_duration=total_duration,
+        total_processing_time=total_time,
+        total_chunks=len(chunks),
+        model_name=model_name,
+        input_key=input_key,
+        download_time=download_time,
+        prep_time=split_time,
+        transcribe_time=transcribe_time,
+        gpu_peak_gb=gpu_peak_gb
+    )
     
     result = {
         'input_file': input_key,

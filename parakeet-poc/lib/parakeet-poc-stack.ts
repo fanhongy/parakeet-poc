@@ -101,11 +101,22 @@ export class ParakeetPocStack extends cdk.Stack {
       ],
     });
 
-    // Task role for S3 access (shared)
+    // Task role for S3 access and CloudWatch metrics (shared)
     const taskRole = new iam.Role(this, 'TaskRole', {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
     });
     bucket.grantReadWrite(taskRole);
+    
+    // Allow EMF metrics to be published to CloudWatch
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['cloudwatch:PutMetricData'],
+      resources: ['*'],
+      conditions: {
+        StringEquals: {
+          'cloudwatch:namespace': 'Parakeet/ASR',
+        },
+      },
+    }));
 
     // Lambda security group (shared)
     const lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
