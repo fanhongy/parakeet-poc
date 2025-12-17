@@ -43,7 +43,7 @@ export class ParakeetPocStack extends cdk.Stack {
       maxAudioDurationMinutes: 60,
       inputPrefix: 'input/',
       serviceName: 'standard',
-      numWorkers: 5,  // 2 workers × ~1.3GB = ~2.6GB GPU (A10G has 24GB)
+      numWorkers: 8,  // 2 workers × ~1.3GB = ~2.6GB GPU (A10G has 24GB)
     };
 
     // Long audio service with larger GPU for bigger chunks

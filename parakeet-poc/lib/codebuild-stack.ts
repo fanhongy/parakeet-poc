@@ -61,13 +61,25 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
+    // S3 bucket for Docker build cache
+    const cacheBucket = new s3.Bucket(this, 'CacheBucket', {
+      bucketName: `parakeet-build-cache-${this.account}-${this.region}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      lifecycleRules: [
+        {
+          expiration: cdk.Duration.days(30), // Clean up old cache after 30 days
+        },
+      ],
+    });
+
 
 
     // CodeBuild project - no source, downloads assets from S3
     this.codeBuildProject = new codebuild.Project(this, 'ParakeetBuildProject', {
       projectName: 'parakeet-asr-build',
       description: 'Build and push Parakeet ASR Docker image to ECR',
-      buildSpec: this.createBuildSpec(assetsBucket.bucketName),
+      buildSpec: this.createBuildSpec(assetsBucket.bucketName, cacheBucket.bucketName),
       environment: {
         buildImage: codebuild.LinuxBuildImage.STANDARD_7_0,
         computeType: codebuild.ComputeType.LARGE,
@@ -98,14 +110,17 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
           enabled: true,
         },
       },
-      // Use LOCAL_DOCKER_LAYER_CACHE for fast Docker builds
-      cache: codebuild.Cache.local(codebuild.LocalCacheMode.DOCKER_LAYER),
+      // Use S3 cache for Docker BuildKit cache - persists across builds
+      cache: codebuild.Cache.bucket(cacheBucket, {
+        prefix: 'docker-cache',
+      }),
       timeout: cdk.Duration.hours(2), // NeMo base image is large (~15GB)
     });
 
-    // Grant CodeBuild permission to push to ECR and read from assets bucket
+    // Grant CodeBuild permission to push to ECR, read from assets bucket, and read/write cache bucket
     this.ecrRepository.grantPullPush(this.codeBuildProject);
     assetsBucket.grantRead(this.codeBuildProject);
+    cacheBucket.grantReadWrite(this.codeBuildProject);
 
     // If NGC API key secret is provided, grant access and add env var
     if (props?.ngcApiKeySecretArn) {
@@ -155,9 +170,14 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
     });
   }
 
-  private createBuildSpec(assetsBucketName: string): codebuild.BuildSpec {
+  private createBuildSpec(assetsBucketName: string, cacheBucketName: string): codebuild.BuildSpec {
     return codebuild.BuildSpec.fromObject({
       version: '0.2',
+      env: {
+        variables: {
+          DOCKER_BUILDKIT: '1',
+        },
+      },
       phases: {
         pre_build: {
           commands: [
@@ -170,17 +190,23 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
             `aws s3 cp s3://${assetsBucketName}/Dockerfile docker/`,
             `aws s3 cp s3://${assetsBucketName}/transcribe.proto proto/`,
             `aws s3 cp s3://${assetsBucketName}/transcribe_grpc.py scripts/`,
-            // Pull existing image for cache (if exists)
-            'echo Pulling existing image for cache...',
-            'docker pull $ECR_REPO_URI:latest || true',
+            // Restore BuildKit cache from S3
+            'echo Restoring Docker BuildKit cache from S3...',
+            'mkdir -p /tmp/buildkit-cache',
+            `aws s3 sync s3://${cacheBucketName}/buildkit-cache /tmp/buildkit-cache || echo "No existing cache found"`,
           ],
         },
         build: {
           commands: [
             'echo Build started on `date`',
-            'echo Building Docker image with cache...',
-            // Use --cache-from to leverage existing layers
-            'docker build --platform linux/amd64 --cache-from $ECR_REPO_URI:latest -f docker/Dockerfile -t $ECR_REPO_URI:$IMAGE_TAG .',
+            'echo Building Docker image with BuildKit cache...',
+            // Use BuildKit with cache-from/cache-to for S3-backed caching
+            `docker build --platform linux/amd64 \\
+              --cache-from type=local,src=/tmp/buildkit-cache \\
+              --cache-to type=local,dest=/tmp/buildkit-cache,mode=max \\
+              --build-arg BUILDKIT_INLINE_CACHE=1 \\
+              -f docker/Dockerfile \\
+              -t $ECR_REPO_URI:$IMAGE_TAG .`,
             'docker tag $ECR_REPO_URI:$IMAGE_TAG $ECR_REPO_URI:build-$CODEBUILD_BUILD_NUMBER',
           ],
         },
@@ -191,6 +217,9 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
             'docker push $ECR_REPO_URI:$IMAGE_TAG',
             'docker push $ECR_REPO_URI:build-$CODEBUILD_BUILD_NUMBER',
             'echo Image pushed: $ECR_REPO_URI:$IMAGE_TAG',
+            // Save BuildKit cache to S3
+            'echo Saving Docker BuildKit cache to S3...',
+            `aws s3 sync /tmp/buildkit-cache s3://${cacheBucketName}/buildkit-cache --delete`,
           ],
         },
       },
