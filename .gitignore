@@ -10,3 +10,4 @@ sampleaudio
 cdk.out
 parakeet-poc/cdk.out
 .DS_Store
+.kiro/tracking_doc

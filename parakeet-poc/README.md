@@ -43,7 +43,29 @@ python3 -m venv .venv
 ./scripts/build-lambda-layer.sh
 
 cdk bootstrap  # if first time
-cdk deploy
+cdk deploy ParakeetPocStack
+```
+
+## Build Docker Image via CodeBuild
+
+Instead of building locally (slow on Mac), use CodeBuild:
+
+```bash
+# Deploy CodeBuild stack (first time only)
+cdk deploy ParakeetCodeBuildStack
+
+# Upload assets and trigger build
+./scripts/deploy-image.sh           # tag: latest
+./scripts/deploy-image.sh v1.0.0    # custom tag
+
+# Monitor build
+aws logs tail /codebuild/parakeet-asr --follow
+```
+
+Then enable ECR image in `bin/parakeet-poc.ts`:
+```typescript
+ecrRepoName: 'parakeet-asr',
+ecrImageTag: 'latest',
 ```
 
 ## Usage
@@ -94,10 +116,15 @@ aws ecs list-tasks --cluster parakeet-poc-cluster
 | File | Purpose |
 |------|---------|
 | `lib/parakeet-poc-stack.ts` | CDK infrastructure (NLB + gRPC) |
+| `lib/codebuild-stack.ts` | CodeBuild for Docker image builds |
 | `bin/parakeet-poc.ts` | CDK app entry, model selection |
 | `scripts/transcribe_grpc.py` | gRPC transcription server |
+| `scripts/deploy-image.sh` | Upload assets & trigger CodeBuild |
+| `scripts/build-lambda-layer.sh` | Build Lambda layer with gRPC deps |
 | `proto/transcribe.proto` | gRPC service definition |
 | `lambda/index_grpc.py` | S3 trigger Lambda (gRPC client) |
+| `lambda-layer/` | Lambda layer with gRPC dependencies |
+| `docker/Dockerfile` | Container image definition |
 
 ## Cleanup
 

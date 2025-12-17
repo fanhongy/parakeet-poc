@@ -55,6 +55,66 @@ cdk bootstrap  # first time only
 cdk deploy
 ```
 
+## Using Pre-built ECR Images (Recommended)
+
+By default, the stack pulls the NeMo container from NVIDIA NGC and installs dependencies at runtime. For faster ECS task startup (~2-3 min vs ~5-10 min), you can pre-build and push a container to ECR.
+
+### Option 1: Build via CodeBuild (Recommended)
+
+Use CodeBuild to build and push the image - faster than local builds and doesn't require local Docker.
+
+```bash
+cd parakeet-poc
+
+# Deploy the CodeBuild stack (first time only)
+cdk deploy ParakeetCodeBuildStack
+
+# Upload build assets and trigger build
+./scripts/deploy-image.sh           # builds with tag 'latest'
+./scripts/deploy-image.sh v1.0.0    # builds with custom tag
+```
+
+Monitor the build:
+```bash
+aws logs tail /codebuild/parakeet-asr --follow
+```
+
+### Option 2: Build Locally
+
+```bash
+cd parakeet-poc/docker
+
+# Build and push (requires Docker with ~50GB free space)
+# Use --platform linux/amd64 if building on ARM Mac
+./build-and-push.sh
+```
+
+### Deploy with ECR Image
+
+Edit `parakeet-poc/bin/parakeet-poc.ts` to specify the ECR repo:
+
+```typescript
+new ParakeetPocStack(app, 'ParakeetPocStack', {
+  vpcId: 'vpc-xxxxxxxxx',
+  parakeetModel: 'nvidia/parakeet-ctc-0.6b',
+  ecrRepoName: 'parakeet-asr',      // Add this
+  ecrImageTag: 'latest',            // Optional, defaults to 'latest'
+});
+```
+
+Then redeploy:
+
+```bash
+cdk deploy ParakeetPocStack
+```
+
+### Benefits of ECR Images
+
+| Approach | Task Startup | First Request |
+|----------|--------------|---------------|
+| NGC (default) | ~5-10 min | Includes pip install + S3 script download |
+| ECR (pre-built) | ~2-3 min | Dependencies pre-installed |
+
 ## Usage
 
 Upload audio to S3 to trigger transcription:
@@ -90,12 +150,17 @@ Configure in `parakeet-poc/bin/parakeet-poc.ts`:
 ```
 parakeet-poc/
 ├── bin/                    # CDK app entry point
-├── lib/                    # CDK stack definition
+├── lib/                    # CDK stack definitions
+│   ├── parakeet-poc-stack.ts   # Main ECS infrastructure
+│   └── codebuild-stack.ts      # CodeBuild for Docker builds
 ├── lambda/                 # Lambda gRPC client
-├── scripts/                # gRPC transcription server
+├── scripts/                # Scripts
+│   ├── transcribe_grpc.py      # gRPC transcription server
+│   ├── deploy-image.sh         # Upload assets & trigger CodeBuild
+│   └── build-lambda-layer.sh   # Build Lambda layer with gRPC
 ├── proto/                  # Protocol buffer definitions
-├── lambda-layer/           # Lambda dependencies
-└── docker/                 # Optional pre-built container
+├── lambda-layer/           # Lambda dependencies (gRPC, protobuf)
+└── docker/                 # Container image definition
 ```
 
 ## Output Format

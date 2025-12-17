@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
 """
 Parakeet transcription gRPC server for ECS.
-Runs as gRPC server, receives S3 keys, transcribes in configurable chunks, uploads results.
-Model stays loaded in memory for fast processing.
-
-gRPC provides significantly better performance than HTTP for this use case:
-- Binary protocol with efficient serialization (protobuf)
-- HTTP/2 multiplexing and streaming
-- Lower latency and reduced overhead
+Uses multiprocessing for true parallel inference - each worker has its own model copy.
 
 Environment variables:
   - CHUNK_DURATION: Chunk size in seconds (default: 30)
@@ -15,6 +9,7 @@ Environment variables:
   - PARAKEET_MODEL: Model name (default: nvidia/parakeet-rnnt-1.1b)
   - S3_BUCKET: S3 bucket name
   - GRPC_PORT: gRPC server port (default: 50051)
+  - NUM_WORKERS: Number of worker processes (default: 2)
 """
 import os
 import json
@@ -22,49 +17,30 @@ import time
 import boto3
 import tempfile
 import subprocess
+import multiprocessing as mp
 from concurrent import futures
 import grpc
-import nemo.collections.asr as nemo_asr
+import threading
 
 # Import generated protobuf classes
 import transcribe_pb2
 import transcribe_pb2_grpc
 
-# Global model - loaded once at startup
-MODEL = None
-MODEL_NAME = None
-S3_CLIENT = boto3.client('s3')
-BUCKET = os.environ['S3_BUCKET']
-
-# Configurable parameters from environment
+# Configurable parameters
 CHUNK_DURATION = int(os.environ.get('CHUNK_DURATION', '30'))
 MAX_AUDIO_DURATION_MINUTES = int(os.environ.get('MAX_AUDIO_DURATION_MINUTES', '60'))
 MAX_AUDIO_DURATION_SECONDS = MAX_AUDIO_DURATION_MINUTES * 60
+NUM_WORKERS = int(os.environ.get('NUM_WORKERS', '2'))
 
+# Global manager - must be created before fork/spawn
+_manager = None
 
-def load_model():
-    """Load model at startup - always load regardless of chunking mode."""
-    global MODEL, MODEL_NAME
-    import torch
-    
-    MODEL_NAME = os.environ.get('PARAKEET_MODEL', 'nvidia/parakeet-rnnt-1.1b')
-    chunk_mode = "disabled (full audio)" if CHUNK_DURATION == 0 else f"{CHUNK_DURATION}s chunks"
-    print(f"Config: chunking={chunk_mode}, max_audio={MAX_AUDIO_DURATION_MINUTES}min", flush=True)
-    
-    print(f"Loading model: {MODEL_NAME}...", flush=True)
-    start = time.time()
-    torch.cuda.empty_cache()
-    MODEL = nemo_asr.models.ASRModel.from_pretrained(MODEL_NAME)
-    MODEL.eval()
-    print(f"Model loaded in {time.time() - start:.2f}s", flush=True)
-
-
-def get_or_load_model():
-    """Get the pre-loaded model."""
-    global MODEL
-    if MODEL is None:
-        raise RuntimeError("Model not loaded - call load_model() first")
-    return MODEL
+def get_manager():
+    """Get or create the global multiprocessing manager."""
+    global _manager
+    if _manager is None:
+        _manager = mp.Manager()
+    return _manager
 
 
 def get_audio_duration(audio_path: str) -> float:
@@ -77,11 +53,8 @@ def get_audio_duration(audio_path: str) -> float:
     return float(result.stdout.strip())
 
 
-def split_audio(audio_path: str, chunk_duration: int = None) -> list:
-    """Split audio into chunks and return list of chunk file paths."""
-    if chunk_duration is None:
-        chunk_duration = CHUNK_DURATION
-    
+def split_audio(audio_path: str, chunk_duration: int) -> list:
+    """Split audio into chunks."""
     duration = get_audio_duration(audio_path)
     chunks = []
     base_name = os.path.splitext(os.path.basename(audio_path))[0]
@@ -110,20 +83,11 @@ def split_audio(audio_path: str, chunk_duration: int = None) -> list:
         start_time += chunk_duration
         chunk_idx += 1
     
-    print(f"Split audio into {len(chunks)} chunks of {chunk_duration}s each", flush=True)
     return chunks
 
 
-def prepare_audio(audio_path: str) -> str:
-    """Convert audio to 16kHz mono WAV for ASR processing."""
-    output_path = audio_path.rsplit('.', 1)[0] + '_prepared.wav'
-    cmd = ['ffmpeg', '-y', '-i', audio_path, '-ar', '16000', '-ac', '1', output_path]
-    subprocess.run(cmd, capture_output=True)
-    return output_path
-
-
 def extract_text(result) -> str:
-    """Safely extract text string from NeMo transcribe result."""
+    """Safely extract text from NeMo result."""
     if not result:
         return ''
     text = result[0] if isinstance(result, list) else result
@@ -132,223 +96,148 @@ def extract_text(result) -> str:
     return str(text) if text else ''
 
 
-def get_memory_stats() -> dict:
-    """Get current GPU and system memory statistics."""
+# =============================================================================
+# Worker Process
+# =============================================================================
+
+def worker_process(worker_id: int, request_queue, response_dict, model_name: str, 
+                   bucket: str, chunk_duration: int, max_duration: int, use_fp16: bool):
+    """Worker process that loads its own model and processes requests."""
     import torch
-    import psutil
-    
-    stats = {
-        'system_ram_used_gb': round(psutil.virtual_memory().used / 1e9, 2),
-        'system_ram_total_gb': round(psutil.virtual_memory().total / 1e9, 2),
-        'system_ram_percent': psutil.virtual_memory().percent,
-    }
+    import gc
+    import nemo.collections.asr as nemo_asr
     
     if torch.cuda.is_available():
-        stats.update({
-            'gpu_allocated_gb': round(torch.cuda.memory_allocated() / 1e9, 2),
-            'gpu_reserved_gb': round(torch.cuda.memory_reserved() / 1e9, 2),
-            'gpu_max_allocated_gb': round(torch.cuda.max_memory_allocated() / 1e9, 2),
-            'gpu_total_gb': round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2),
-        })
+        torch.cuda.set_device(0)
     
-    return stats
-
-
-def log_memory(label: str):
-    """Log memory stats with a label."""
-    stats = get_memory_stats()
-    gpu_info = f"GPU: {stats.get('gpu_allocated_gb', 0):.2f}/{stats.get('gpu_total_gb', 0):.2f}GB"
-    ram_info = f"RAM: {stats['system_ram_used_gb']:.1f}/{stats['system_ram_total_gb']:.1f}GB ({stats['system_ram_percent']}%)"
-    print(f"[MEMORY] {label}: {gpu_info} | {ram_info}", flush=True)
-
-
-def transcribe_buffered(audio_path: str, model) -> tuple:
-    """Transcribe long audio using NeMo's buffered/streaming approach."""
-    import torch
-    import numpy as np
-    import soundfile as sf
-    from nemo.collections.asr.parts.utils.streaming_utils import FrameBatchASR
+    print(f"[Worker {worker_id}] Starting, loading model: {model_name}...", flush=True)
+    start = time.time()
     
-    audio_data, sample_rate = sf.read(audio_path)
-    if sample_rate != 16000:
-        raise ValueError(f"Audio must be 16kHz, got {sample_rate}Hz")
+    torch.cuda.empty_cache()
+    model = nemo_asr.models.ASRModel.from_pretrained(model_name)
+    model.eval()
     
-    total_duration = len(audio_data) / sample_rate
-    print(f"Buffered transcription: {total_duration:.1f}s audio", flush=True)
+    if use_fp16 and torch.cuda.is_available():
+        model = model.half()
     
-    frame_len = 1.6
-    total_buffer = 4.0
-    batch_size = 32
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1e9
+        total = torch.cuda.get_device_properties(0).total_memory / 1e9
+        print(f"[Worker {worker_id}] Model loaded in {time.time() - start:.2f}s, GPU: {allocated:.2f}/{total:.2f}GB", flush=True)
+    else:
+        print(f"[Worker {worker_id}] Model loaded in {time.time() - start:.2f}s (CPU mode)", flush=True)
     
-    try:
-        streaming_asr = FrameBatchASR(
-            asr_model=model, frame_len=frame_len,
-            total_buffer=total_buffer, batch_size=batch_size,
-        )
-        streaming_asr.reset()
-        
-        chunk_size = int(30 * sample_rate)
-        all_text = []
-        segments = []
-        
-        for i in range(0, len(audio_data), chunk_size):
-            chunk = audio_data[i:i + chunk_size]
-            chunk_start_time = i / sample_rate
-            chunk_end_time = min((i + len(chunk)) / sample_rate, total_duration)
+    s3_client = boto3.client('s3')
+    
+    print(f"[Worker {worker_id}] Ready for requests", flush=True)
+    
+    while True:
+        try:
+            request = request_queue.get()
             
-            streaming_asr.add_audio(chunk)
-            text = streaming_asr.transcribe()
+            if request is None:
+                print(f"[Worker {worker_id}] Shutting down", flush=True)
+                break
             
-            if text and text.strip():
-                all_text.append(text.strip())
-                segments.append({
-                    'index': len(segments),
-                    'start_time': chunk_start_time,
-                    'end_time': chunk_end_time,
-                    'text': text.strip(),
-                })
-            log_memory(f"Buffered chunk {len(segments)}")
-        
-        final_text = streaming_asr.transcribe(finish=True)
-        if final_text and final_text.strip() and final_text.strip() not in all_text:
-            all_text.append(final_text.strip())
-        
-        return ' '.join(all_text), segments
-        
-    except Exception as e:
-        print(f"Buffered transcription failed: {e}, falling back to standard", flush=True)
-        result = model.transcribe([audio_path])
-        full_text = extract_text(result)
-        return full_text, [{'index': 0, 'start_time': 0, 'end_time': total_duration, 'text': full_text}]
+            request_id = request['request_id']
+            input_key = request['input_key']
+            
+            print(f"[Worker {worker_id}] Processing request #{request_id}: {input_key}", flush=True)
+            
+            try:
+                result = process_transcription(
+                    worker_id, model, s3_client, bucket, input_key,
+                    chunk_duration, max_duration, model_name
+                )
+                response_dict[request_id] = {'result': result, 'error': None, 'done': True}
+                
+            except Exception as e:
+                import traceback
+                print(f"[Worker {worker_id}] Error processing #{request_id}: {e}", flush=True)
+                traceback.print_exc()
+                response_dict[request_id] = {'result': None, 'error': str(e), 'done': True}
+                
+        except Exception as e:
+            print(f"[Worker {worker_id}] Queue error: {e}", flush=True)
 
 
-def transcribe(input_key: str) -> dict:
-    """Download audio, validate duration, optionally split into chunks, transcribe."""
+def process_transcription(worker_id: int, model, s3_client, bucket: str, 
+                          input_key: str, chunk_duration: int, max_duration: int,
+                          model_name: str) -> dict:
+    """Process a single transcription request."""
     import torch
     import gc
     
-    # Release GPU memory before starting transcription
     gc.collect()
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     
     base_name = os.path.splitext(os.path.basename(input_key))[0]
     output_key = f"output/{base_name}_transcript.json"
-    local_audio = f"/tmp/{os.path.basename(input_key)}"
+    local_audio = f"/tmp/worker{worker_id}_{os.path.basename(input_key)}"
     
-    print(f"Processing: s3://{BUCKET}/{input_key}", flush=True)
-    log_memory("Start (after GPU cleanup)")
-    
-    # Download
     download_start = time.time()
-    S3_CLIENT.download_file(BUCKET, input_key, local_audio)
+    s3_client.download_file(bucket, input_key, local_audio)
     download_time = time.time() - download_start
-    print(f"Downloaded in {download_time:.2f}s", flush=True)
-    log_memory("After download")
+    print(f"[Worker {worker_id}] Downloaded in {download_time:.2f}s", flush=True)
     
-    # Get total duration and validate
     total_duration = get_audio_duration(local_audio)
-    print(f"Audio duration: {total_duration:.1f}s ({total_duration/60:.1f} min)", flush=True)
+    print(f"[Worker {worker_id}] Audio duration: {total_duration:.1f}s", flush=True)
     
-    if total_duration > MAX_AUDIO_DURATION_SECONDS:
+    if total_duration > max_duration:
         os.remove(local_audio)
-        raise ValueError(
-            f"Audio duration ({total_duration/60:.1f} min) exceeds maximum "
-            f"allowed ({MAX_AUDIO_DURATION_MINUTES} min) for this service"
-        )
+        raise ValueError(f"Audio too long: {total_duration/60:.1f} min > {max_duration/60:.0f} min max")
     
-    use_chunking = CHUNK_DURATION > 0
+    split_start = time.time()
+    chunks = split_audio(local_audio, chunk_duration)
+    split_time = time.time() - split_start
+    print(f"[Worker {worker_id}] Split into {len(chunks)} chunks in {split_time:.2f}s", flush=True)
     
-    if use_chunking:
-        split_start = time.time()
-        chunks = split_audio(local_audio)
-        split_time = time.time() - split_start
-        print(f"Split completed in {split_time:.2f}s", flush=True)
-        
-        transcribe_start = time.time()
-        transcriptions = []
-        model = get_or_load_model()
-        log_memory("After model load")
-        
-        import torch
-        import gc
-        
-        for i, chunk in enumerate(chunks):
-            # Clear GPU cache before each chunk to prevent OOM
-            gc.collect()
-            torch.cuda.empty_cache()
-            
-            chunk_start = time.time()
-            with torch.no_grad():
-                with torch.inference_mode():
-                    result = model.transcribe([chunk['path']])
-            chunk_time = time.time() - chunk_start
-            
-            text = extract_text(result)
-            transcriptions.append({
-                'index': chunk['index'],
-                'start_time': chunk['start_time'],
-                'end_time': chunk['end_time'],
-                'text': text,
-                'processing_time': round(chunk_time, 2)
-            })
-            
-            # Aggressive cleanup after each chunk
-            del result
-            gc.collect()
-            torch.cuda.empty_cache()
-            
-            stats = get_memory_stats()
-            print(f"  Chunk {i+1}/{len(chunks)}: {chunk_time:.2f}s | GPU: {stats.get('gpu_allocated_gb', 0):.2f}GB", flush=True)
-            os.remove(chunk['path'])
-        
-        transcribe_time = time.time() - transcribe_start
-        full_text = ' '.join([t['text'] for t in transcriptions if t['text']])
-        num_chunks = len(chunks)
-    else:
-        split_time = 0.0
-        print(f"Processing full audio (buffered streaming mode)...", flush=True)
-        
-        prep_start = time.time()
-        prepared_audio = prepare_audio(local_audio)
-        split_time = time.time() - prep_start
-        print(f"Audio prepared in {split_time:.2f}s", flush=True)
-        
-        import torch
-        import gc
+    transcribe_start = time.time()
+    transcriptions = []
+    
+    for i, chunk in enumerate(chunks):
         gc.collect()
         torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
         
-        log_memory("Before model load")
-        model = get_or_load_model()
-        log_memory("After model load")
-        
-        transcribe_start = time.time()
+        chunk_start = time.time()
         with torch.no_grad():
             with torch.inference_mode():
-                full_text, transcriptions = transcribe_buffered(prepared_audio, model)
-        transcribe_time = time.time() - transcribe_start
+                result = model.transcribe([chunk['path']], batch_size=1, verbose=False)
+        chunk_time = time.time() - chunk_start
         
-        for seg in transcriptions:
-            seg['processing_time'] = round(transcribe_time / max(len(transcriptions), 1), 2)
+        text = extract_text(result)
+        transcriptions.append({
+            'index': chunk['index'],
+            'start_time': chunk['start_time'],
+            'end_time': chunk['end_time'],
+            'text': text,
+            'processing_time': round(chunk_time, 2)
+        })
         
-        log_memory("After transcription")
-        stats = get_memory_stats()
-        print(f"GPU peak memory: {stats.get('gpu_max_allocated_gb', 0):.2f}GB", flush=True)
+        del result
         
-        num_chunks = len(transcriptions)
-        if os.path.exists(prepared_audio):
-            os.remove(prepared_audio)
+        if torch.cuda.is_available():
+            gpu_gb = torch.cuda.memory_allocated() / 1e9
+            print(f"[Worker {worker_id}]   Chunk {i+1}/{len(chunks)}: {chunk_time:.2f}s | GPU: {gpu_gb:.2f}GB", flush=True)
+        
+        os.remove(chunk['path'])
     
-    print(f"Transcription completed in {transcribe_time:.2f}s", flush=True)
+    transcribe_time = time.time() - transcribe_start
+    full_text = ' '.join([t['text'] for t in transcriptions if t['text']])
     
-    final_memory = get_memory_stats()
-    log_memory("Final")
+    print(f"[Worker {worker_id}] Transcription completed in {transcribe_time:.2f}s", flush=True)
+    
+    memory = {}
+    if torch.cuda.is_available():
+        memory = {
+            'gpu_peak_gb': round(torch.cuda.max_memory_allocated() / 1e9, 2),
+            'gpu_total_gb': round(torch.cuda.get_device_properties(0).total_memory / 1e9, 2),
+        }
     
     result = {
         'input_file': input_key,
-        'model': MODEL_NAME,
+        'model': model_name,
         'transcription': full_text,
         'segments': transcriptions,
         'audio_duration_seconds': round(total_duration, 2),
@@ -359,155 +248,185 @@ def transcribe(input_key: str) -> dict:
             'total_seconds': round(download_time + split_time + transcribe_time, 2),
         },
         'processing_config': {
-            'chunking_enabled': use_chunking,
-            'chunk_duration_seconds': CHUNK_DURATION if use_chunking else None,
-            'total_chunks': num_chunks,
-            'max_audio_duration_minutes': MAX_AUDIO_DURATION_MINUTES
+            'chunking_enabled': True,
+            'chunk_duration_seconds': chunk_duration,
+            'total_chunks': len(chunks),
         },
-        'memory': {
-            'gpu_peak_gb': final_memory.get('gpu_max_allocated_gb'),
-            'gpu_total_gb': final_memory.get('gpu_total_gb'),
-            'system_ram_used_gb': final_memory.get('system_ram_used_gb'),
-            'system_ram_total_gb': final_memory.get('system_ram_total_gb'),
-        }
+        'memory': memory,
+        'worker_id': worker_id,
     }
     
-    # Upload result to S3
-    S3_CLIENT.put_object(
-        Bucket=BUCKET, Key=output_key,
+    s3_client.put_object(
+        Bucket=bucket, Key=output_key,
         Body=json.dumps(result, indent=2),
         ContentType='application/json'
     )
-    print(f"Result saved to s3://{BUCKET}/{output_key}", flush=True)
+    print(f"[Worker {worker_id}] Result saved to s3://{bucket}/{output_key}", flush=True)
     
     os.remove(local_audio)
     return result
 
 
+# =============================================================================
+# gRPC Service
+# =============================================================================
+
 class TranscribeServicer(transcribe_pb2_grpc.TranscribeServiceServicer):
-    """gRPC service implementation for transcription."""
+    """gRPC service that dispatches requests to worker pool."""
+    
+    def __init__(self, request_queue, response_dict):
+        self.request_queue = request_queue
+        self.response_dict = response_dict
+        self.request_counter = 0
+        self.counter_lock = threading.Lock()
     
     def Transcribe(self, request, context):
-        """Handle transcription request."""
+        """Handle transcription request by dispatching to worker pool."""
         input_key = request.input_key
         
         if not input_key:
             return transcribe_pb2.TranscribeResponse(error="input_key required")
         
-        try:
-            result = transcribe(input_key)
-            
-            # Log completion
-            timing = result['timing']
-            config = result['processing_config']
-            memory = result.get('memory', {})
-            print(f"=== TRANSCRIPTION COMPLETE (gRPC) ===", flush=True)
-            print(f"  File: {input_key}", flush=True)
-            print(f"  Audio duration: {result['audio_duration_seconds']}s", flush=True)
-            print(f"  Chunking: {'enabled' if config['chunking_enabled'] else 'disabled (full audio)'}", flush=True)
-            if config['chunking_enabled']:
-                print(f"  Chunks: {config['total_chunks']} x {config['chunk_duration_seconds']}s", flush=True)
-            print(f"  Download: {timing['download_seconds']}s", flush=True)
-            print(f"  Prep: {timing['prep_seconds']}s", flush=True)
-            print(f"  Transcription: {timing['transcription_seconds']}s", flush=True)
-            print(f"  Total: {timing['total_seconds']}s", flush=True)
-            print(f"  GPU Peak: {memory.get('gpu_peak_gb', 'N/A')}GB / {memory.get('gpu_total_gb', 'N/A')}GB", flush=True)
-            print(f"======================================", flush=True)
-            
-            # Build protobuf response
-            segments = [
-                transcribe_pb2.Segment(
-                    index=s['index'],
-                    start_time=s['start_time'],
-                    end_time=s['end_time'],
-                    text=s['text'],
-                    processing_time=s.get('processing_time', 0)
-                )
-                for s in result['segments']
-            ]
-            
-            return transcribe_pb2.TranscribeResponse(
-                input_file=result['input_file'],
-                model=result['model'],
-                transcription=result['transcription'],
-                segments=segments,
-                audio_duration_seconds=result['audio_duration_seconds'],
-                timing=transcribe_pb2.Timing(
-                    download_seconds=timing['download_seconds'],
-                    prep_seconds=timing['prep_seconds'],
-                    transcription_seconds=timing['transcription_seconds'],
-                    total_seconds=timing['total_seconds'],
-                ),
-                processing_config=transcribe_pb2.ProcessingConfig(
-                    chunking_enabled=config['chunking_enabled'],
-                    chunk_duration_seconds=config['chunk_duration_seconds'] or 0,
-                    total_chunks=config['total_chunks'],
-                    max_audio_duration_minutes=config['max_audio_duration_minutes'],
-                ),
-                memory=transcribe_pb2.MemoryStats(
-                    gpu_peak_gb=memory.get('gpu_peak_gb') or 0,
-                    gpu_total_gb=memory.get('gpu_total_gb') or 0,
-                    system_ram_used_gb=memory.get('system_ram_used_gb') or 0,
-                    system_ram_total_gb=memory.get('system_ram_total_gb') or 0,
-                ),
+        with self.counter_lock:
+            self.request_counter += 1
+            request_id = self.request_counter
+        
+        print(f"[gRPC] Request #{request_id} received: {input_key}", flush=True)
+        
+        # Initialize response slot
+        self.response_dict[request_id] = {'done': False}
+        
+        # Submit to worker pool
+        self.request_queue.put({
+            'request_id': request_id,
+            'input_key': input_key,
+        })
+        
+        # Poll for response
+        timeout = 600  # 10 min
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.response_dict.get(request_id, {}).get('done'):
+                break
+            time.sleep(0.1)
+        
+        response = self.response_dict.get(request_id, {})
+        
+        # Cleanup
+        if request_id in self.response_dict:
+            del self.response_dict[request_id]
+        
+        if not response.get('done'):
+            print(f"[gRPC] Request #{request_id} timeout", flush=True)
+            return transcribe_pb2.TranscribeResponse(error="Processing timeout")
+        
+        if response.get('error'):
+            print(f"[gRPC] Request #{request_id} failed: {response['error']}", flush=True)
+            return transcribe_pb2.TranscribeResponse(error=response['error'])
+        
+        result = response['result']
+        timing = result['timing']
+        config = result['processing_config']
+        memory = result.get('memory', {})
+        
+        print(f"[gRPC] Request #{request_id} complete: {result['audio_duration_seconds']}s audio in {timing['total_seconds']}s (worker {result.get('worker_id', '?')})", flush=True)
+        
+        segments = [
+            transcribe_pb2.Segment(
+                index=s['index'],
+                start_time=s['start_time'],
+                end_time=s['end_time'],
+                text=s['text'],
+                processing_time=s.get('processing_time', 0)
             )
-            
-        except ValueError as e:
-            print(f"VALIDATION ERROR: {str(e)}", flush=True)
-            context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
-            context.set_details(str(e))
-            return transcribe_pb2.TranscribeResponse(error=str(e))
-        except Exception as e:
-            print(f"ERROR: {str(e)}", flush=True)
-            context.set_code(grpc.StatusCode.INTERNAL)
-            context.set_details(str(e))
-            return transcribe_pb2.TranscribeResponse(error=str(e))
-    
-    def HealthCheck(self, request, context):
-        """Handle health check request."""
-        return transcribe_pb2.HealthCheckResponse(
-            status='healthy',
-            model_loaded=MODEL is not None,
-            config=transcribe_pb2.ProcessingConfig(
-                chunking_enabled=CHUNK_DURATION > 0,
-                chunk_duration_seconds=CHUNK_DURATION if CHUNK_DURATION > 0 else 0,
-                total_chunks=0,
+            for s in result['segments']
+        ]
+        
+        return transcribe_pb2.TranscribeResponse(
+            input_file=result['input_file'],
+            model=result['model'],
+            transcription=result['transcription'],
+            segments=segments,
+            audio_duration_seconds=result['audio_duration_seconds'],
+            timing=transcribe_pb2.Timing(
+                download_seconds=timing['download_seconds'],
+                prep_seconds=timing['prep_seconds'],
+                transcription_seconds=timing['transcription_seconds'],
+                total_seconds=timing['total_seconds'],
+            ),
+            processing_config=transcribe_pb2.ProcessingConfig(
+                chunking_enabled=config['chunking_enabled'],
+                chunk_duration_seconds=config['chunk_duration_seconds'] or 0,
+                total_chunks=config['total_chunks'],
                 max_audio_duration_minutes=MAX_AUDIO_DURATION_MINUTES,
+            ),
+            memory=transcribe_pb2.MemoryStats(
+                gpu_peak_gb=memory.get('gpu_peak_gb') or 0,
+                gpu_total_gb=memory.get('gpu_total_gb') or 0,
+                system_ram_used_gb=0,
+                system_ram_total_gb=0,
             ),
         )
 
 
 def serve():
-    """Start the gRPC server."""
-    load_model()
+    """Start worker pool and gRPC server."""
+    bucket = os.environ['S3_BUCKET']
+    model_name = os.environ.get('PARAKEET_MODEL', 'nvidia/parakeet-rnnt-1.1b')
+    use_fp16 = os.environ.get('USE_FP16', 'true').lower() == 'true'
+    port = os.environ.get('GRPC_PORT', '50051')
     
-    port = int(os.environ.get('GRPC_PORT', '50051'))
+    print(f"=== Parakeet ASR Server (Process Pool) ===", flush=True)
+    print(f"Model: {model_name}", flush=True)
+    print(f"Workers: {NUM_WORKERS}", flush=True)
+    print(f"Chunk duration: {CHUNK_DURATION}s", flush=True)
+    print(f"Max audio: {MAX_AUDIO_DURATION_MINUTES} min", flush=True)
+    print(f"FP16: {use_fp16}", flush=True)
+    print(f"==========================================", flush=True)
     
-    # Configure server with appropriate settings for long-running transcriptions
-    server = grpc.server(
-        futures.ThreadPoolExecutor(max_workers=4),
-        options=[
-            ('grpc.max_send_message_length', 100 * 1024 * 1024),  # 100MB
-            ('grpc.max_receive_message_length', 100 * 1024 * 1024),  # 100MB
-            ('grpc.keepalive_time_ms', 30000),  # 30s keepalive
-            ('grpc.keepalive_timeout_ms', 10000),  # 10s timeout
-            ('grpc.keepalive_permit_without_calls', True),
-            ('grpc.http2.max_pings_without_data', 0),
-        ]
-    )
+    # Use mp.Queue directly (works with spawn) for request queue
+    # Use Manager dict for responses (needs to be shared dict)
+    request_queue = mp.Queue()
+    manager = get_manager()
+    response_dict = manager.dict()
     
+    # Start worker processes
+    workers = []
+    for i in range(NUM_WORKERS):
+        p = mp.Process(
+            target=worker_process,
+            args=(i, request_queue, response_dict, model_name, bucket, 
+                  CHUNK_DURATION, MAX_AUDIO_DURATION_SECONDS, use_fp16),
+        )
+        p.start()
+        workers.append(p)
+        print(f"Started worker {i} (PID: {p.pid})", flush=True)
+    
+    print("Waiting for workers to load models...", flush=True)
+    time.sleep(5)
+    
+    # Start gRPC server
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     transcribe_pb2_grpc.add_TranscribeServiceServicer_to_server(
-        TranscribeServicer(), server
+        TranscribeServicer(request_queue, response_dict), server
     )
-    
     server.add_insecure_port(f'[::]:{port}')
     server.start()
     
     print(f"gRPC server running on port {port}", flush=True)
-    print(f"Ready to process audio up to {MAX_AUDIO_DURATION_MINUTES} minutes", flush=True)
+    print(f"Ready to process {NUM_WORKERS} requests in parallel", flush=True)
     
-    server.wait_for_termination()
+    try:
+        server.wait_for_termination()
+    except KeyboardInterrupt:
+        print("Shutting down...", flush=True)
+        for _ in workers:
+            request_queue.put(None)
+        for w in workers:
+            w.join(timeout=5)
 
 
 if __name__ == '__main__':
+    # Set spawn method before creating any multiprocessing objects
+    mp.set_start_method('spawn', force=True)
     serve()

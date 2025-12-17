@@ -18,6 +18,7 @@ interface ParakeetServiceConfig {
   maxAudioDurationMinutes: number;
   inputPrefix: string;
   serviceName: string;
+  numWorkers: number;  // Number of parallel worker processes (each loads model copy)
 }
 
 interface ParakeetPocStackProps extends cdk.StackProps {
@@ -26,6 +27,9 @@ interface ParakeetPocStackProps extends cdk.StackProps {
   // Optional: use custom ECR image instead of pulling from NVIDIA NGC
   ecrRepoName?: string;
   ecrImageTag?: string;
+  // Optional: image digest to force ECS task update when image changes
+  // Pass the digest from ECR (e.g., sha256:abc123...) to trigger rolling update
+  ecrImageDigest?: string;
 }
 
 export class ParakeetPocStack extends cdk.Stack {
@@ -34,11 +38,12 @@ export class ParakeetPocStack extends cdk.Stack {
 
     // Service configurations for dual-path architecture
     const standardConfig: ParakeetServiceConfig = {
-      instanceType: 'g4dn.2xlarge',
+      instanceType: 'g5.2xlarge',
       chunkDurationSeconds: 30,
       maxAudioDurationMinutes: 60,
       inputPrefix: 'input/',
       serviceName: 'standard',
+      numWorkers: 5,  // 2 workers × ~1.3GB = ~2.6GB GPU (A10G has 24GB)
     };
 
     // Long audio service with larger GPU for bigger chunks
@@ -52,6 +57,7 @@ export class ParakeetPocStack extends cdk.Stack {
       maxAudioDurationMinutes: 60,
       inputPrefix: 'input-nochunk/',
       serviceName: 'no-chunk',
+      numWorkers: 2,  // 2 workers for parallel processing
     };
 
     // Import existing VPC
@@ -67,7 +73,7 @@ export class ParakeetPocStack extends cdk.Stack {
     // Upload transcribe script and proto files to S3 (deployed via CDK)
     new s3deploy.BucketDeployment(this, 'DeployScript', {
       sources: [
-        s3deploy.Source.asset('./scripts'),
+        s3deploy.Source.asset('./scripts', { exclude: ['__pycache__', '*.pyc'] }),
         s3deploy.Source.asset('./proto'),
       ],
       destinationBucket: bucket,
@@ -112,13 +118,13 @@ export class ParakeetPocStack extends cdk.Stack {
     const standardService = this.createParakeetService(
       standardConfig, vpc, cluster, bucket, logGroup, executionRole, taskRole, 
       lambdaSecurityGroup, props.parakeetModel, 'Standard',
-      props.ecrRepoName, props.ecrImageTag
+      props.ecrRepoName, props.ecrImageTag, props.ecrImageDigest
     );
 
     const noChunkService = this.createParakeetService(
       noChunkConfig, vpc, cluster, bucket, logGroup, executionRole, taskRole,
       lambdaSecurityGroup, props.parakeetModel, 'NoChunk',
-      props.ecrRepoName, props.ecrImageTag
+      props.ecrRepoName, props.ecrImageTag, props.ecrImageDigest
     );
 
     // Lambda layer for gRPC dependencies
@@ -208,6 +214,7 @@ export class ParakeetPocStack extends cdk.Stack {
     idPrefix: string,
     ecrRepoName?: string,
     ecrImageTag?: string,
+    ecrImageDigest?: string,
   ): { nlb: elbv2.NetworkLoadBalancer; service: ecs.Ec2Service } {
     
     // Determine memory/CPU based on instance type
@@ -234,24 +241,70 @@ export class ParakeetPocStack extends cdk.Stack {
       cpu = 3 * 1024;          // 3 vCPU (of 8)
     }
 
-    // Add GPU EC2 capacity
-    const autoScalingGroup = cluster.addCapacity(`${idPrefix}GpuCapacity`, {
+    // Security group for EC2 instances
+    const instanceSecurityGroup = new ec2.SecurityGroup(this, `${idPrefix}InstanceSG`, {
+      vpc,
+      description: `Security group for Parakeet ${config.serviceName} EC2 instances`,
+      allowAllOutbound: true,
+    });
+
+    // IAM role for EC2 instances
+    const instanceRole = new iam.Role(this, `${idPrefix}InstanceRole`, {
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonEC2ContainerServiceforEC2Role'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
+      ],
+    });
+
+    // User data script for ECS agent config
+    const userData = ec2.UserData.forLinux();
+    userData.addCommands(
+      '#!/bin/bash',
+      'set -e',
+      '',
+      '# Configure ECS agent',
+      `echo ECS_CLUSTER=${cluster.clusterName} >> /etc/ecs/ecs.config`,
+      'echo ECS_ENABLE_GPU_SUPPORT=true >> /etc/ecs/ecs.config',
+    );
+
+    // Launch Template for GPU instances
+    const launchTemplate = new ec2.LaunchTemplate(this, `${idPrefix}LaunchTemplate`, {
+      launchTemplateName: `parakeet-${config.serviceName}-gpu`,
       instanceType: new ec2.InstanceType(config.instanceType),
       machineImage: ecs.EcsOptimizedImage.amazonLinux2(ecs.AmiHardwareType.GPU),
-      minCapacity: 2,
-      maxCapacity: 2,
-      desiredCapacity: 2,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      role: instanceRole,
+      securityGroup: instanceSecurityGroup,
+      userData,
       blockDevices: [
         {
           deviceName: '/dev/xvda',
-          volume: autoscaling.BlockDeviceVolume.ebs(200, {  // 200GB for large NeMo container (~15GB)
-            volumeType: autoscaling.EbsDeviceVolumeType.GP3,
+          volume: ec2.BlockDeviceVolume.ebs(200, {
+            volumeType: ec2.EbsDeviceVolumeType.GP3,
             deleteOnTermination: true,
           }),
         },
       ],
     });
+
+    // Auto Scaling Group using Launch Template
+    const autoScalingGroup = new autoscaling.AutoScalingGroup(this, `${idPrefix}Asg`, {
+      vpc,
+      launchTemplate,
+      minCapacity: 2,
+      maxCapacity: 2,
+      desiredCapacity: 2,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+    });
+
+    // Associate ASG with ECS cluster using Capacity Provider
+    const capacityProvider = new ecs.AsgCapacityProvider(this, `${idPrefix}CapacityProvider`, {
+      autoScalingGroup,
+      capacityProviderName: `parakeet-${config.serviceName}-cp`,
+      enableManagedScaling: false,
+      enableManagedTerminationProtection: false,
+    });
+    cluster.addAsgCapacityProvider(capacityProvider);
 
     // ECS Task Definition
     const taskDefinition = new ecs.Ec2TaskDefinition(this, `${idPrefix}Task`, {
@@ -268,7 +321,10 @@ export class ParakeetPocStack extends cdk.Stack {
     if (ecrRepoName) {
       // Use pre-built ECR image (faster startup, no runtime pip install)
       const ecrRepo = ecr.Repository.fromRepositoryName(this, `${idPrefix}EcrRepo`, ecrRepoName);
-      containerImage = ecs.ContainerImage.fromEcrRepository(ecrRepo, ecrImageTag || 'latest');
+      // Use digest if provided (triggers ECS update when image changes), otherwise use tag
+      containerImage = ecrImageDigest
+        ? ecs.ContainerImage.fromRegistry(`${ecrRepo.repositoryUri}@${ecrImageDigest}`)
+        : ecs.ContainerImage.fromEcrRepository(ecrRepo, ecrImageTag || 'latest');
       containerCommand = undefined;  // Dockerfile has CMD
     } else {
       // Pull from NVIDIA NGC and install deps at runtime
@@ -299,8 +355,10 @@ export class ParakeetPocStack extends cdk.Stack {
         AWS_DEFAULT_REGION: this.region!,
         GRPC_PORT: '50051',
         PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True',
+        USE_FP16: 'true',  // Use half-precision to reduce GPU memory (~50% reduction)
         CHUNK_DURATION: config.chunkDurationSeconds.toString(),
         MAX_AUDIO_DURATION_MINUTES: config.maxAudioDurationMinutes.toString(),
+        NUM_WORKERS: config.numWorkers.toString(),  // Parallel worker processes
       },
       gpuCount: 1,
       ...(containerCommand && { command: containerCommand }),
