@@ -1,14 +1,33 @@
-node_modules
-parakeet-poc/node_modules
-parakeet-poc/.venv
-parakeet-poc/lambda-layer/python
-parakeet-poc/lambda/transcribe_pb2.py
-parakeet-poc/lambda/transcribe_pb2_grpc.py
-__pycache__
+# Dependencies
+node_modules/
+
+# Python
+__pycache__/
 *.pyc
-sampleaudio
-cdk.out
-parakeet-poc/cdk.out
-parakeet-poc/cdk.out/*
+*.pyo
+.venv/
+venv/
+
+# CDK
+cdk.out/
+*.js
+!jest.config.js
+*.d.ts
+
+# Generated protobuf files
+*_pb2.py
+*_pb2_grpc.py
+
+# Lambda layer (built artifacts)
+parakeet-poc/lambda-layer/python/
+
+# OS files
 .DS_Store
-.kiro/tracking_doc
+
+# IDE / Editor
+.kiro/
+
+# Project specific
+sampleaudio/
+exec-logs/
+sample-transcription/

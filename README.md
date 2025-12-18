@@ -189,12 +189,22 @@ parakeet-poc/
 
 ## Performance
 
-Benchmarks on g5.2xlarge (A10G 24GB) with `parakeet-ctc-0.6b`:
+Benchmarks on g5.2xlarge (A10G 24GB) with `parakeet-ctc-0.6b`, FP32 precision, 3 workers:
 
-| Audio Length | Chunks | Transcription Time | Real-time Factor |
-|--------------|--------|-------------------|------------------|
-| 40 min | 5 x 600s | ~17s | ~140x |
-| 50 min | 6 x 600s | ~22s | ~140x |
+| Audio Length | Chunks | Processing Time | Real-time Factor | Throughput |
+|--------------|--------|-----------------|------------------|------------|
+| 4m36s (276s) | 10 x 30s | 4.65-5.05s | 55-59x | 55-59 audio-sec/wall-sec |
+
+**Performance Details:**
+- Average processing time: 4.74s per 276s audio file
+- GPU memory per worker: ~1.29 GB (FP32)
+- Model load time: ~350s (one-time startup cost)
+- Consistent sub-5-second processing with excellent worker parallelization
+
+**Note:** FP16 is disabled by default due to precision issues causing garbage output with CTC-0.6b and CUDA errors with RNNT-1.1b on long sequences.
+- Chunk processing: ~0.06s per 30s chunk
+- Test volume: 405 requests processed in 30-minute window
+- Model: nvidia/parakeet-ctc-0.6b
 
 ## License
 
