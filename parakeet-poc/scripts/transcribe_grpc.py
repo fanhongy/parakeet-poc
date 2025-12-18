@@ -255,7 +255,8 @@ def extract_text(result) -> str:
 # =============================================================================
 
 def worker_process(worker_id: int, request_queue, response_dict, model_name: str, 
-                   bucket: str, chunk_duration: int, max_duration: int, use_fp16: bool):
+                   bucket: str, chunk_duration: int, max_duration: int, use_fp16: bool,
+                   ready_event=None):
     """Worker process that loads its own model and processes requests."""
     import torch
     import gc
@@ -268,11 +269,17 @@ def worker_process(worker_id: int, request_queue, response_dict, model_name: str
     start = time.time()
     
     torch.cuda.empty_cache()
+    gc.collect()  # Clean up before loading
+    
     model = nemo_asr.models.ASRModel.from_pretrained(model_name)
     model.eval()
     
     if use_fp16 and torch.cuda.is_available():
         model = model.half()
+    
+    # Force garbage collection after model load to free temp memory
+    gc.collect()
+    torch.cuda.empty_cache()
     
     if torch.cuda.is_available():
         allocated = torch.cuda.memory_allocated() / 1e9
@@ -282,6 +289,10 @@ def worker_process(worker_id: int, request_queue, response_dict, model_name: str
         print(f"[Worker {worker_id}] Model loaded in {time.time() - start:.2f}s (CPU mode)", flush=True)
     
     s3_client = boto3.client('s3')
+    
+    # Signal that this worker is ready
+    if ready_event is not None:
+        ready_event.set()
     
     print(f"[Worker {worker_id}] Ready for requests", flush=True)
     
@@ -457,11 +468,17 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
 class TranscribeServicer(transcribe_pb2_grpc.TranscribeServiceServicer):
     """gRPC service that dispatches requests to worker pool."""
     
-    def __init__(self, request_queue, response_dict):
+    def __init__(self, request_queue, response_dict, workers):
         self.request_queue = request_queue
         self.response_dict = response_dict
+        self.workers = workers  # List of worker processes for health check
         self.request_counter = 0
         self.counter_lock = threading.Lock()
+    
+    def _check_workers_alive(self) -> int:
+        """Check how many workers are still alive."""
+        alive_count = sum(1 for w in self.workers if w.is_alive())
+        return alive_count
     
     def Transcribe(self, request, context):
         """Handle transcription request by dispatching to worker pool."""
@@ -470,11 +487,17 @@ class TranscribeServicer(transcribe_pb2_grpc.TranscribeServiceServicer):
         if not input_key:
             return transcribe_pb2.TranscribeResponse(error="input_key required")
         
+        # Check worker health before accepting request
+        alive_workers = self._check_workers_alive()
+        if alive_workers == 0:
+            print(f"[gRPC] ERROR: All workers are dead!", flush=True)
+            return transcribe_pb2.TranscribeResponse(error="No workers available - all workers have died")
+        
         with self.counter_lock:
             self.request_counter += 1
             request_id = self.request_counter
         
-        print(f"[gRPC] Request #{request_id} received: {input_key}", flush=True)
+        print(f"[gRPC] Request #{request_id} received: {input_key} (workers alive: {alive_workers}/{len(self.workers)})", flush=True)
         
         # Initialize response slot
         self.response_dict[request_id] = {'done': False}
@@ -558,40 +581,64 @@ def serve():
     model_name = os.environ.get('PARAKEET_MODEL', 'nvidia/parakeet-rnnt-1.1b')
     use_fp16 = os.environ.get('USE_FP16', 'true').lower() == 'true'
     port = os.environ.get('GRPC_PORT', '50051')
+    worker_batch_size = int(os.environ.get('WORKER_BATCH_SIZE', '2'))  # Load 2 workers at a time
     
     print(f"=== Parakeet ASR Server (Process Pool) ===", flush=True)
     print(f"Model: {model_name}", flush=True)
     print(f"Workers: {NUM_WORKERS}", flush=True)
+    print(f"Worker batch size: {worker_batch_size}", flush=True)
     print(f"Chunk duration: {CHUNK_DURATION}s", flush=True)
     print(f"Max audio: {MAX_AUDIO_DURATION_MINUTES} min", flush=True)
     print(f"FP16: {use_fp16}", flush=True)
     print(f"==========================================", flush=True)
     
-    # Use mp.Queue directly (works with spawn) for request queue
-    # Use Manager dict for responses (needs to be shared dict)
-    request_queue = mp.Queue()
+    # Use Manager for both queue and dict - more robust for long-running processes
+    # mp.Queue can have issues after extended idle periods
     manager = get_manager()
+    request_queue = manager.Queue()
     response_dict = manager.dict()
     
-    # Start worker processes
+    # Start worker processes in batches to avoid RAM spike
     workers = []
-    for i in range(NUM_WORKERS):
-        p = mp.Process(
-            target=worker_process,
-            args=(i, request_queue, response_dict, model_name, bucket, 
-                  CHUNK_DURATION, MAX_AUDIO_DURATION_SECONDS, use_fp16),
-        )
-        p.start()
-        workers.append(p)
-        print(f"Started worker {i} (PID: {p.pid})", flush=True)
-    
-    print("Waiting for workers to load models...", flush=True)
-    time.sleep(5)
+    for batch_start in range(0, NUM_WORKERS, worker_batch_size):
+        batch_end = min(batch_start + worker_batch_size, NUM_WORKERS)
+        batch_workers = []
+        ready_events = []
+        
+        print(f"Starting worker batch {batch_start}-{batch_end-1}...", flush=True)
+        
+        for i in range(batch_start, batch_end):
+            ready_event = mp.Event()
+            ready_events.append(ready_event)
+            
+            p = mp.Process(
+                target=worker_process,
+                args=(i, request_queue, response_dict, model_name, bucket, 
+                      CHUNK_DURATION, MAX_AUDIO_DURATION_SECONDS, use_fp16, ready_event),
+            )
+            p.start()
+            batch_workers.append(p)
+            workers.append(p)
+            print(f"Started worker {i} (PID: {p.pid})", flush=True)
+        
+        # Wait for all workers in this batch to signal ready (model loaded)
+        print(f"Waiting for batch {batch_start}-{batch_end-1} to load models...", flush=True)
+        for idx, event in enumerate(ready_events):
+            worker_id = batch_start + idx
+            if event.wait(timeout=300):  # 5 min timeout per batch
+                print(f"Worker {worker_id} ready", flush=True)
+            else:
+                print(f"WARNING: Worker {worker_id} did not signal ready in time", flush=True)
+        
+        # Small delay between batches to let memory settle
+        if batch_end < NUM_WORKERS:
+            print(f"Batch {batch_start}-{batch_end-1} loaded. Pausing before next batch...", flush=True)
+            time.sleep(3)
     
     # Start gRPC server
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     transcribe_pb2_grpc.add_TranscribeServiceServicer_to_server(
-        TranscribeServicer(request_queue, response_dict), server
+        TranscribeServicer(request_queue, response_dict, workers), server
     )
     server.add_insecure_port(f'[::]:{port}')
     server.start()

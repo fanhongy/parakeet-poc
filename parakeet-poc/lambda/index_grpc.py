@@ -50,8 +50,11 @@ def handler(event, context):
     channel_options = [
         ('grpc.max_send_message_length', 100 * 1024 * 1024),  # 100MB
         ('grpc.max_receive_message_length', 100 * 1024 * 1024),  # 100MB
-        ('grpc.keepalive_time_ms', 30000),  # 30s keepalive
-        ('grpc.keepalive_timeout_ms', 10000),  # 10s timeout
+        ('grpc.keepalive_time_ms', 120000),  # 2 min keepalive (less aggressive)
+        ('grpc.keepalive_timeout_ms', 20000),  # 20s timeout
+        ('grpc.keepalive_permit_without_calls', 0),  # Don't send pings when idle
+        ('grpc.http2.max_pings_without_data', 0),  # Unlimited pings with data
+        ('grpc.http2.min_time_between_pings_ms', 120000),  # Min 2 min between pings
         ('grpc.enable_retries', 1),
     ]
     

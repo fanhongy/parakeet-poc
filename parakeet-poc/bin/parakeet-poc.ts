@@ -43,6 +43,7 @@ new ParakeetPocStack(app, 'ParakeetPocStack', {
   // - nvidia/parakeet-ctc-0.6b (NeMo 24.05+, smaller/faster)
   // - nvidia/parakeet-tdt-0.6b-v2 (NeMo 24.09+, requires newer container)
   parakeetModel: 'nvidia/parakeet-ctc-0.6b',
+  // parakeetModel: 'nvidia/parakeet-rnnt-1.1b',
   
   // Optional: Use pre-built ECR image (faster startup)
   ecrRepoName: 'parakeet-asr',

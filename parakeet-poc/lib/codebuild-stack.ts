@@ -170,7 +170,7 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
     });
   }
 
-  private createBuildSpec(assetsBucketName: string, cacheBucketName: string): codebuild.BuildSpec {
+  private createBuildSpec(assetsBucketName: string, _cacheBucketName: string): codebuild.BuildSpec {
     return codebuild.BuildSpec.fromObject({
       version: '0.2',
       env: {
@@ -190,20 +190,14 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
             `aws s3 cp s3://${assetsBucketName}/Dockerfile docker/`,
             `aws s3 cp s3://${assetsBucketName}/transcribe.proto proto/`,
             `aws s3 cp s3://${assetsBucketName}/transcribe_grpc.py scripts/`,
-            // Restore BuildKit cache from S3
-            'echo Restoring Docker BuildKit cache from S3...',
-            'mkdir -p /tmp/buildkit-cache',
-            `aws s3 sync s3://${cacheBucketName}/buildkit-cache /tmp/buildkit-cache || echo "No existing cache found"`,
           ],
         },
         build: {
           commands: [
             'echo Build started on `date`',
-            'echo Building Docker image with BuildKit cache...',
-            // Use BuildKit with cache-from/cache-to for S3-backed caching
+            'echo Building Docker image...',
+            // Simple docker build without cache-to (not supported by default driver)
             `docker build --platform linux/amd64 \\
-              --cache-from type=local,src=/tmp/buildkit-cache \\
-              --cache-to type=local,dest=/tmp/buildkit-cache,mode=max \\
               --build-arg BUILDKIT_INLINE_CACHE=1 \\
               -f docker/Dockerfile \\
               -t $ECR_REPO_URI:$IMAGE_TAG .`,
@@ -217,9 +211,6 @@ export class ParakeetCodeBuildStack extends cdk.Stack {
             'docker push $ECR_REPO_URI:$IMAGE_TAG',
             'docker push $ECR_REPO_URI:build-$CODEBUILD_BUILD_NUMBER',
             'echo Image pushed: $ECR_REPO_URI:$IMAGE_TAG',
-            // Save BuildKit cache to S3
-            'echo Saving Docker BuildKit cache to S3...',
-            `aws s3 sync /tmp/buildkit-cache s3://${cacheBucketName}/buildkit-cache --delete`,
           ],
         },
       },

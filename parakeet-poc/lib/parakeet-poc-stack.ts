@@ -43,7 +43,7 @@ export class ParakeetPocStack extends cdk.Stack {
       maxAudioDurationMinutes: 60,
       inputPrefix: 'input/',
       serviceName: 'standard',
-      numWorkers: 8,  // 2 workers × ~1.3GB = ~2.6GB GPU (A10G has 24GB)
+      numWorkers: 11,  // 2 workers × ~1.3GB = ~2.6GB GPU (A10G has 24GB)
     };
 
     // Long audio service with larger GPU for bigger chunks
@@ -366,10 +366,11 @@ export class ParakeetPocStack extends cdk.Stack {
         AWS_DEFAULT_REGION: this.region!,
         GRPC_PORT: '50051',
         PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True',
-        USE_FP16: 'true',  // Use half-precision to reduce GPU memory (~50% reduction)
+        USE_FP16: 'false',  // Disabled - RNNT models have CUDA memory issues with FP16 on long sequences
         CHUNK_DURATION: config.chunkDurationSeconds.toString(),
         MAX_AUDIO_DURATION_MINUTES: config.maxAudioDurationMinutes.toString(),
         NUM_WORKERS: config.numWorkers.toString(),  // Parallel worker processes
+        WORKER_BATCH_SIZE: '2',  // Load workers in batches to avoid RAM spike during startup
       },
       gpuCount: 1,
       ...(containerCommand && { command: containerCommand }),

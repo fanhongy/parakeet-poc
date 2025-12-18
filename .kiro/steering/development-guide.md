@@ -63,6 +63,35 @@ Edit `bin/parakeet-poc.ts`, update `parakeetModel`, then `cdk deploy`.
 - Transcription server: gRPC over NLB (port 50051)
 - Chunked (30s) for standard, full audio for long-audio service
 
+## Worker Configuration
+
+The transcription server uses multiprocessing with configurable workers:
+
+**Environment Variables:**
+- `NUM_WORKERS` - Number of parallel worker processes (default: 2)
+- `WORKER_BATCH_SIZE` - Workers loaded per batch to prevent RAM spike (default: 2)
+- `CHUNK_DURATION` - Audio chunk size in seconds (default: 30)
+- `MAX_AUDIO_DURATION_MINUTES` - Maximum audio length (default: 60)
+- `USE_FP16` - Half-precision inference (default: false, see note below)
+
+**FP16 Precision Warning:**
+FP16 (half-precision) is **disabled by default** because it causes issues with Parakeet models:
+- **CTC-0.6b**: FP16 corrupts model weights, producing `⁇` garbage output
+- **RNNT-1.1b**: FP16 causes CUDA illegal memory access errors on long audio chunks (600s+)
+
+Only enable FP16 if you've tested thoroughly with your specific model and chunk configuration.
+
+**Worker Startup:**
+- Workers load in batches (e.g., 2 at a time) to avoid memory pressure
+- Each worker loads its own model copy (~1.3GB GPU memory per worker)
+- 3-second pause between batches for memory stabilization
+- Workers signal readiness via multiprocessing Events
+
+**Queue Management:**
+- Uses `multiprocessing.Manager().Queue()` for robust IPC
+- Manager queues survive extended idle periods better than raw `mp.Queue()`
+- gRPC server monitors worker health and reports alive worker count
+
 ## Updating Proto Definition
 
 After modifying `proto/transcribe.proto`, regenerate Python files:
