@@ -5,6 +5,7 @@ interface ParakeetPocStackProps extends cdk.StackProps {
     parakeetModel: string;
     ecrRepoName?: string;
     ecrImageTag?: string;
+    ecrImageDigest?: string;
 }
 export declare class ParakeetPocStack extends cdk.Stack {
     constructor(scope: Construct, id: string, props: ParakeetPocStackProps);

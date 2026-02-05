@@ -208,7 +208,7 @@ def get_audio_duration(audio_path: str) -> float:
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1', safe_path
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # nosec B603
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
     if result.returncode != 0:
         raise RuntimeError(f"ffprobe failed: {result.stderr}")
     return float(result.stdout.strip())
@@ -236,7 +236,7 @@ def split_audio(audio_path: str, chunk_duration: int) -> list:
             '-ss', str(start_time), '-t', str(chunk_duration),
             '-ar', '16000', '-ac', '1', chunk_path
         ]
-        subprocess.run(cmd, capture_output=True, check=False)  # nosec B603
+        subprocess.run(cmd, capture_output=True, check=False)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
         
         if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
             chunks.append({
@@ -530,7 +530,7 @@ class TranscribeServicer(transcribe_pb2_grpc.TranscribeServiceServicer):
         while time.time() - start < timeout:
             if self.response_dict.get(request_id, {}).get('done'):
                 break
-            time.sleep(0.1)
+            time.sleep(0.1)  # nosemgrep: python.lang.best-practice.arbitrary-sleep
         
         response = self.response_dict.get(request_id, {})
         
@@ -649,7 +649,7 @@ def serve():
         # Small delay between batches to let memory settle
         if batch_end < NUM_WORKERS:
             print(f"Batch {batch_start}-{batch_end-1} loaded. Pausing before next batch...", flush=True)
-            time.sleep(3)
+            time.sleep(3)  # nosemgrep: python.lang.best-practice.arbitrary-sleep
     
     # Start gRPC server
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
