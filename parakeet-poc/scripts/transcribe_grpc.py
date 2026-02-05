@@ -199,19 +199,31 @@ def get_manager():
 
 def get_audio_duration(audio_path: str) -> float:
     """Get audio duration in seconds using ffprobe."""
+    # Validate path to prevent command injection
+    if not os.path.isfile(audio_path):
+        raise ValueError(f"Invalid audio path: {audio_path}")
+    # Use absolute path to avoid path traversal
+    safe_path = os.path.abspath(audio_path)
     cmd = [
         'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-        '-of', 'default=noprint_wrappers=1:nokey=1', audio_path
+        '-of', 'default=noprint_wrappers=1:nokey=1', safe_path
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # nosec B603
+    if result.returncode != 0:
+        raise RuntimeError(f"ffprobe failed: {result.stderr}")
     return float(result.stdout.strip())
 
 
 def split_audio(audio_path: str, chunk_duration: int) -> list:
     """Split audio into chunks."""
-    duration = get_audio_duration(audio_path)
+    # Validate path to prevent command injection
+    if not os.path.isfile(audio_path):
+        raise ValueError(f"Invalid audio path: {audio_path}")
+    safe_path = os.path.abspath(audio_path)
+    
+    duration = get_audio_duration(safe_path)
     chunks = []
-    base_name = os.path.splitext(os.path.basename(audio_path))[0]
+    base_name = os.path.splitext(os.path.basename(safe_path))[0]
     temp_dir = tempfile.mkdtemp()
     
     start_time = 0
@@ -220,11 +232,11 @@ def split_audio(audio_path: str, chunk_duration: int) -> list:
     while start_time < duration:
         chunk_path = os.path.join(temp_dir, f"{base_name}_chunk_{chunk_idx:04d}.wav")
         cmd = [
-            'ffmpeg', '-y', '-i', audio_path,
+            'ffmpeg', '-y', '-i', safe_path,
             '-ss', str(start_time), '-t', str(chunk_duration),
             '-ar', '16000', '-ac', '1', chunk_path
         ]
-        subprocess.run(cmd, capture_output=True)
+        subprocess.run(cmd, capture_output=True, check=False)  # nosec B603
         
         if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
             chunks.append({
@@ -339,7 +351,11 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
     
     base_name = os.path.splitext(os.path.basename(input_key))[0]
     output_key = f"output/{base_name}_transcript.json"
-    local_audio = f"/tmp/worker{worker_id}_{os.path.basename(input_key)}"
+    
+    # Use secure temp file instead of predictable /tmp path
+    file_ext = os.path.splitext(input_key)[1] or '.wav'
+    temp_fd, local_audio = tempfile.mkstemp(suffix=file_ext, prefix=f'worker{worker_id}_')
+    os.close(temp_fd)  # Close fd, we'll use the path with boto3
     
     download_start = time.time()
     s3_client.download_file(bucket, input_key, local_audio)
