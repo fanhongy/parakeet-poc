@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir \
     grpcio-tools \
     psutil
 
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser
+
 # Create app directory
 WORKDIR /app
 
@@ -19,6 +22,10 @@ RUN python -m grpc_tools.protoc -I/app --python_out=/app --grpc_python_out=/app 
 
 # Copy transcription server
 COPY scripts/transcribe_grpc.py /app/
+
+# Set ownership and switch to non-root user
+RUN chown -R appuser:appuser /app
+USER appuser
 
 # Default environment variables (can be overridden at runtime)
 ENV GRPC_PORT=50051
