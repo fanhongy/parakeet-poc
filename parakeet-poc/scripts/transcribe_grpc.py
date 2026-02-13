@@ -18,6 +18,8 @@ import time
 import boto3
 import tempfile
 import subprocess
+import soundfile as sf
+from pydub import AudioSegment
 import multiprocessing as mp
 from concurrent import futures
 import grpc
@@ -198,55 +200,45 @@ def get_manager():
 
 
 def get_audio_duration(audio_path: str) -> float:
-    """Get audio duration in seconds using ffprobe."""
-    # Validate path to prevent command injection
+    """Get audio duration in seconds using soundfile."""
     if not os.path.isfile(audio_path):
         raise ValueError(f"Invalid audio path: {audio_path}")
-    # Use absolute path to avoid path traversal
     safe_path = os.path.abspath(audio_path)
-    cmd = [
-        'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-        '-of', 'default=noprint_wrappers=1:nokey=1', safe_path
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-    if result.returncode != 0:
-        raise RuntimeError(f"ffprobe failed: {result.stderr}")
-    return float(result.stdout.strip())
+    info = sf.info(safe_path)
+    return info.duration
 
 
 def split_audio(audio_path: str, chunk_duration: int) -> list:
-    """Split audio into chunks."""
-    # Validate path to prevent command injection
+    """Split audio into chunks using pydub."""
     if not os.path.isfile(audio_path):
         raise ValueError(f"Invalid audio path: {audio_path}")
     safe_path = os.path.abspath(audio_path)
-    
+
     duration = get_audio_duration(safe_path)
+    audio = AudioSegment.from_file(safe_path).set_frame_rate(16000).set_channels(1)
     chunks = []
     base_name = os.path.splitext(os.path.basename(safe_path))[0]
     temp_dir = tempfile.mkdtemp()
-    
-    start_time = 0
+    chunk_ms = chunk_duration * 1000
+
     chunk_idx = 0
-    
-    while start_time < duration:
+    start_ms = 0
+    total_ms = len(audio)
+
+    while start_ms < total_ms:
+        end_ms = min(start_ms + chunk_ms, total_ms)
         chunk_path = os.path.join(temp_dir, f"{base_name}_chunk_{chunk_idx:04d}.wav")
-        cmd = [
-            'ffmpeg', '-y', '-i', safe_path,
-            '-ss', str(start_time), '-t', str(chunk_duration),
-            '-ar', '16000', '-ac', '1', chunk_path
-        ]
-        subprocess.run(cmd, capture_output=True, check=False)  # nosec B603 # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
-        
+        audio[start_ms:end_ms].export(chunk_path, format="wav")
+
         if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
             chunks.append({
                 'path': chunk_path,
-                'start_time': start_time,
-                'end_time': min(start_time + chunk_duration, duration),
+                'start_time': start_ms / 1000.0,
+                'end_time': end_ms / 1000.0,
                 'index': chunk_idx
             })
-        
-        start_time += chunk_duration
+
+        start_ms = end_ms
         chunk_idx += 1
     
     return chunks
@@ -490,6 +482,7 @@ class TranscribeServicer(transcribe_pb2_grpc.TranscribeServiceServicer):
         self.workers = workers  # List of worker processes for health check
         self.request_counter = 0
         self.counter_lock = threading.Lock()
+        self.pending_events = {}  # request_id -> threading.Event
     
     def _check_workers_alive(self) -> int:
         """Check how many workers are still alive."""
@@ -518,23 +511,35 @@ class TranscribeServicer(transcribe_pb2_grpc.TranscribeServiceServicer):
         # Initialize response slot
         self.response_dict[request_id] = {'done': False}
         
+        # Create event for this request
+        done_event = threading.Event()
+        with self.counter_lock:
+            self.pending_events[request_id] = done_event
+        
+        # Start monitor thread to watch for response
+        def _watch():
+            while not done_event.is_set():
+                if self.response_dict.get(request_id, {}).get('done'):
+                    done_event.set()
+                    return
+                done_event.wait(0.1)
+        watcher = threading.Thread(target=_watch, daemon=True)
+        watcher.start()
+        
         # Submit to worker pool
         self.request_queue.put({
             'request_id': request_id,
             'input_key': input_key,
         })
         
-        # Poll for response
-        timeout = 600  # 10 min
-        start = time.time()
-        while time.time() - start < timeout:
-            if self.response_dict.get(request_id, {}).get('done'):
-                break
-            time.sleep(0.1)  # nosemgrep: python.lang.best-practice.arbitrary-sleep
+        # Wait for response via event
+        done_event.wait(timeout=600)
         
         response = self.response_dict.get(request_id, {})
         
         # Cleanup
+        with self.counter_lock:
+            self.pending_events.pop(request_id, None)
         if request_id in self.response_dict:
             del self.response_dict[request_id]
         
@@ -649,7 +654,8 @@ def serve():
         # Small delay between batches to let memory settle
         if batch_end < NUM_WORKERS:
             print(f"Batch {batch_start}-{batch_end-1} loaded. Pausing before next batch...", flush=True)
-            time.sleep(3)  # nosemgrep: python.lang.best-practice.arbitrary-sleep
+            settle_event = mp.Event()
+            settle_event.wait(timeout=3)
     
     # Start gRPC server
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))

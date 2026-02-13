@@ -34,5 +34,8 @@ ENV MAX_AUDIO_DURATION_MINUTES=60
 
 EXPOSE 50051
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD python -c "import grpc; ch=grpc.insecure_channel('localhost:50051'); grpc.channel_ready_future(ch).result(timeout=3)" || exit 1
+
 # Run gRPC server
 CMD ["python", "/app/transcribe_grpc.py"]
