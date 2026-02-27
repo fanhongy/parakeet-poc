@@ -3,12 +3,13 @@
 
 FROM nvcr.io/nvidia/nemo:24.09
 
-# Install gRPC dependencies
+# Install gRPC dependencies and faster-whisper for Whisper model support
 RUN pip install --no-cache-dir \
     boto3 \
     grpcio \
     grpcio-tools \
-    psutil
+    psutil \
+    faster-whisper
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser
