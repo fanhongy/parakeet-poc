@@ -37,18 +37,28 @@ const parakeetStack = new ParakeetPocStack(app, 'ParakeetPocStack', {
   },
   vpcId: 'vpc-0d6c5654761cfd6fd', //us-east-1
   // vpcId: 'vpc-085e137e76ba56268', //us-west-2
-  // Easy to switch model variants:
-  // - c (default, faster)
-  // - parakeet-ctc-1.1b
-  // - parakeet-tdt-1.1b (best accuracy)
-  // Model variants:
+  // ======================================================================
+  // ASR Model Configuration
+  // ======================================================================
+  // Supports both NVIDIA Parakeet (NeMo) and OpenAI Whisper models.
+  // 
+  // NVIDIA Parakeet models (via NeMo):
   // - nvidia/parakeet-rnnt-1.1b (NeMo 24.05+)
   // - nvidia/parakeet-ctc-1.1b (NeMo 24.05+)
-  // - nvidia/parakeet-tdt-1.1b (NeMo 24.05+)
+  // - nvidia/parakeet-tdt-1.1b (NeMo 24.05+, best accuracy)
   // - nvidia/parakeet-ctc-0.6b (NeMo 24.05+, smaller/faster)
   // - nvidia/parakeet-tdt-0.6b-v2 (NeMo 24.09+, requires newer container)
+  //
+  // OpenAI Whisper models (via faster-whisper):
+  // - openai/whisper-tiny (39M params, fastest)
+  // - openai/whisper-base (74M params)
+  // - openai/whisper-small (244M params)
+  // - openai/whisper-medium (769M params)
+  // - openai/whisper-large-v3 (1.5B params, best accuracy)
+  // ======================================================================
   parakeetModel: 'nvidia/parakeet-ctc-0.6b',
   // parakeetModel: 'nvidia/parakeet-rnnt-1.1b',
+  // parakeetModel: 'openai/whisper-large-v3',  // Use Whisper instead of Parakeet
   
   // Optional: Use pre-built ECR image (faster startup)
   ecrRepoName: 'parakeet-asr',

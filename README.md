@@ -134,11 +134,34 @@ aws s3 cp s3://parakeet-poc-<account>-us-east-1/output/audio_transcript.json .
 
 Configure in `parakeet-poc/bin/parakeet-poc.ts`:
 
+### NVIDIA Parakeet Models (NeMo)
+
 | Model | Size | Notes |
 |-------|------|-------|
 | `nvidia/parakeet-ctc-0.6b` | 0.6B | Smaller, faster |
 | `nvidia/parakeet-rnnt-1.1b` | 1.1B | Balanced |
 | `nvidia/parakeet-tdt-1.1b` | 1.1B | Best accuracy |
+
+### OpenAI Whisper Models (faster-whisper)
+
+| Model | Size | Notes |
+|-------|------|-------|
+| `openai/whisper-tiny` | 39M | Fastest, lowest accuracy |
+| `openai/whisper-base` | 74M | Fast |
+| `openai/whisper-small` | 244M | Good balance |
+| `openai/whisper-medium` | 769M | Better accuracy |
+| `openai/whisper-large-v3` | 1.5B | Best accuracy |
+
+**Whisper Configuration Example:**
+```typescript
+new ParakeetPocStack(app, 'ParakeetPocStack', {
+  vpcId: 'vpc-xxxxxxxxx',
+  parakeetModel: 'openai/whisper-large-v3',  // Use Whisper instead of Parakeet
+  ecrRepoName: 'parakeet-asr',
+});
+```
+
+**Note:** Whisper models use the faster-whisper library (CTranslate2-based) for GPU acceleration and better performance compared to the original openai-whisper implementation.
 
 ## Supported Audio Formats
 

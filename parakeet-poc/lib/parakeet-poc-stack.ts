@@ -371,6 +371,8 @@ export class ParakeetPocStack extends cdk.Stack {
         MAX_AUDIO_DURATION_MINUTES: config.maxAudioDurationMinutes.toString(),
         NUM_WORKERS: config.numWorkers.toString(),  // Parallel worker processes
         WORKER_BATCH_SIZE: '2',  // Load workers in batches to avoid RAM spike during startup
+        // ASR model type detection: 'parakeet' for nvidia/* models, 'whisper' for openai/whisper* models
+        ASR_MODEL_TYPE: parakeetModel.startsWith('openai/whisper') || parakeetModel.startsWith('whisper-') ? 'whisper' : 'parakeet',
       },
       gpuCount: 1,
       ...(containerCommand && { command: containerCommand }),

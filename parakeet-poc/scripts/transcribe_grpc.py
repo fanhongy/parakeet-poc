@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-Parakeet transcription gRPC server for ECS.
+ASR transcription gRPC server for ECS.
+Supports both NVIDIA Parakeet (NeMo) and OpenAI Whisper (faster-whisper) models.
 Uses multiprocessing for true parallel inference - each worker has its own model copy.
 
 Environment variables:
   - CHUNK_DURATION: Chunk size in seconds (default: 30)
   - MAX_AUDIO_DURATION_MINUTES: Maximum audio length in minutes (default: 60)
   - PARAKEET_MODEL: Model name (default: nvidia/parakeet-rnnt-1.1b)
+    Supports: nvidia/parakeet-*, openai/whisper-*, whisper-*
+  - ASR_MODEL_TYPE: Model type override ('parakeet' or 'whisper', auto-detected if not set)
   - S3_BUCKET: S3 bucket name
   - GRPC_PORT: gRPC server port (default: 50051)
   - NUM_WORKERS: Number of worker processes (default: 2)
@@ -254,6 +257,40 @@ def extract_text(result) -> str:
     return str(text) if text else ''
 
 
+def detect_model_type(model_name: str) -> str:
+    """Detect whether the model is Parakeet (NeMo) or Whisper based on name."""
+    # Check environment variable override first
+    env_type = os.environ.get('ASR_MODEL_TYPE', '').lower()
+    if env_type in ('parakeet', 'whisper'):
+        return env_type
+    
+    # Auto-detect based on model name
+    if model_name.startswith('openai/whisper') or model_name.startswith('whisper-'):
+        return 'whisper'
+    return 'parakeet'
+
+
+def transcribe_audio(model, audio_path: str, is_whisper: bool) -> str:
+    """Transcribe audio using either Whisper or Parakeet model.
+    
+    Args:
+        model: The loaded ASR model (WhisperModel or NeMo ASRModel)
+        audio_path: Path to the audio file to transcribe
+        is_whisper: True if using Whisper model, False for Parakeet
+        
+    Returns:
+        Transcribed text as a string
+    """
+    if is_whisper:
+        # faster-whisper returns an iterator of segments
+        segments, info = model.transcribe(audio_path, beam_size=5)
+        return " ".join([segment.text.strip() for segment in segments])
+    else:
+        # NeMo Parakeet model
+        result = model.transcribe([audio_path], batch_size=1, verbose=False)
+        return extract_text(result)
+
+
 # =============================================================================
 # Worker Process
 # =============================================================================
@@ -264,22 +301,43 @@ def worker_process(worker_id: int, request_queue, response_dict, model_name: str
     """Worker process that loads its own model and processes requests."""
     import torch
     import gc
-    import nemo.collections.asr as nemo_asr
+    
+    # Detect model type
+    model_type = detect_model_type(model_name)
+    is_whisper = (model_type == 'whisper')
     
     if torch.cuda.is_available():
         torch.cuda.set_device(0)
     
-    print(f"[Worker {worker_id}] Starting, loading model: {model_name}...", flush=True)
+    print(f"[Worker {worker_id}] Starting, loading {model_type} model: {model_name}...", flush=True)
     start = time.time()
     
     torch.cuda.empty_cache()
     gc.collect()  # Clean up before loading
     
-    model = nemo_asr.models.ASRModel.from_pretrained(model_name)
-    model.eval()
-    
-    if use_fp16 and torch.cuda.is_available():
-        model = model.half()
+    if is_whisper:
+        # Load Whisper model using faster-whisper
+        from faster_whisper import WhisperModel
+        
+        # Extract model size from name (e.g., "openai/whisper-large-v3" -> "large-v3")
+        if model_name.startswith('openai/whisper-'):
+            model_size = model_name.split('openai/whisper-')[-1]
+        elif model_name.startswith('whisper-'):
+            model_size = model_name.split('whisper-')[-1]
+        else:
+            model_size = model_name  # Use as-is if no prefix
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if (use_fp16 and torch.cuda.is_available()) else "float32"
+        model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    else:
+        # Load Parakeet model using NeMo
+        import nemo.collections.asr as nemo_asr
+        model = nemo_asr.models.ASRModel.from_pretrained(model_name)
+        model.eval()
+        
+        if use_fp16 and torch.cuda.is_available():
+            model = model.half()
     
     # Force garbage collection after model load to free temp memory
     gc.collect()
@@ -316,7 +374,7 @@ def worker_process(worker_id: int, request_queue, response_dict, model_name: str
             try:
                 result = process_transcription(
                     worker_id, model, s3_client, bucket, input_key,
-                    chunk_duration, max_duration, model_name
+                    chunk_duration, max_duration, model_name, is_whisper
                 )
                 response_dict[request_id] = {'result': result, 'error': None, 'done': True}
                 
@@ -332,7 +390,7 @@ def worker_process(worker_id: int, request_queue, response_dict, model_name: str
 
 def process_transcription(worker_id: int, model, s3_client, bucket: str, 
                           input_key: str, chunk_duration: int, max_duration: int,
-                          model_name: str) -> dict:
+                          model_name: str, is_whisper: bool = False) -> dict:
     """Process a single transcription request."""
     import torch
     import gc
@@ -376,10 +434,9 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
         chunk_start = time.time()
         with torch.no_grad():
             with torch.inference_mode():
-                result = model.transcribe([chunk['path']], batch_size=1, verbose=False)
+                text = transcribe_audio(model, chunk['path'], is_whisper)
         chunk_time = time.time() - chunk_start
         
-        text = extract_text(result)
         chunk_audio_duration = chunk['end_time'] - chunk['start_time']
         transcriptions.append({
             'index': chunk['index'],
@@ -399,8 +456,6 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
             model_name=model_name,
             input_key=input_key
         )
-        
-        del result
         
         if torch.cuda.is_available():
             gpu_gb = torch.cuda.memory_allocated() / 1e9
