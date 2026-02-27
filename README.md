@@ -41,6 +41,33 @@ This project demonstrates how to deploy NVIDIA's Parakeet speech-to-text models 
 
 ## Quick Start
 
+Deploy with a single command after cloning:
+
+```bash
+git clone <repo-url>
+cd parakeet-poc
+./deploy.sh
+```
+
+This command handles everything:
+1. Installs Node.js dependencies
+2. Sets up Python virtual environment with gRPC tools
+3. Runs CDK bootstrap (if needed)
+4. Builds the Lambda layer
+5. Deploys the CodeBuild stack
+6. Builds the Docker image via CodeBuild
+7. Deploys the main Parakeet stack
+
+To deploy with a custom image tag:
+
+```bash
+./deploy.sh v1.0.0
+```
+
+### Manual Setup (Alternative)
+
+If you prefer to run steps individually:
+
 ```bash
 cd parakeet-poc
 npm install

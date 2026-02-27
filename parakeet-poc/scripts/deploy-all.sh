@@ -18,8 +18,13 @@ echo "============================================"
 echo "Image Tag: ${IMAGE_TAG}"
 echo ""
 
+# Step 0: Bootstrap prerequisites (idempotent)
+echo ">>> Step 0/5: Ensuring prerequisites..."
+./scripts/bootstrap.sh
+echo ""
+
 # Step 1: Build Lambda Layer
-echo ">>> Step 1/4: Building Lambda layer..."
+echo ">>> Step 1/5: Building Lambda layer..."
 if [ ! -d ".venv" ]; then
     echo "Creating Python virtual environment..."
     python3 -m venv .venv
@@ -30,13 +35,13 @@ echo "Lambda layer built."
 echo ""
 
 # Step 2: Deploy CodeBuild stack (if not already deployed)
-echo ">>> Step 2/4: Deploying CodeBuild stack..."
+echo ">>> Step 2/5: Deploying CodeBuild stack..."
 npx cdk deploy ParakeetCodeBuildStack --require-approval never
 echo "CodeBuild stack deployed."
 echo ""
 
 # Step 3: Build and push Docker image via CodeBuild
-echo ">>> Step 3/4: Building Docker image via CodeBuild..."
+echo ">>> Step 3/5: Building Docker image via CodeBuild..."
 ./scripts/deploy-image.sh "$IMAGE_TAG"
 
 # Wait for build to complete
@@ -85,7 +90,7 @@ echo "Image digest: ${IMAGE_DIGEST}"
 echo ""
 
 # Step 4: Deploy main stack with image digest
-echo ">>> Step 4/4: Deploying main Parakeet stack with image digest..."
+echo ">>> Step 4/5: Deploying main Parakeet stack with image digest..."
 npx cdk deploy ParakeetPocStack --require-approval never -c imageDigest=${IMAGE_DIGEST}
 echo ""
 
