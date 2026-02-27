@@ -18,6 +18,11 @@ echo "============================================"
 echo "Image Tag: ${IMAGE_TAG}"
 echo ""
 
+# Step 0: Bootstrap prerequisites (idempotent)
+echo ">>> Step 0/4: Ensuring prerequisites..."
+./scripts/bootstrap.sh
+echo ""
+
 # Step 1: Build Lambda Layer
 echo ">>> Step 1/4: Building Lambda layer..."
 if [ ! -d ".venv" ]; then
