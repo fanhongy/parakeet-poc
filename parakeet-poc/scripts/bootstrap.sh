@@ -63,12 +63,20 @@ echo ""
 echo ">>> Checking CDK bootstrap status..."
 AWS_REGION="${AWS_REGION:-us-east-1}"
 
+# Validate AWS credentials before making API calls
+if ! aws sts get-caller-identity --region "$AWS_REGION" &> /dev/null; then
+    echo "ERROR: AWS credentials are not configured or invalid."
+    echo "       Run 'aws configure' to set up your AWS credentials."
+    exit 1
+fi
+echo "  ✓ AWS credentials valid"
+
 # Check if CDKToolkit stack exists
 if aws cloudformation describe-stacks --stack-name CDKToolkit --region "$AWS_REGION" &> /dev/null; then
     echo "  ✓ CDK already bootstrapped in $AWS_REGION"
 else
     echo "  CDK not bootstrapped. Running cdk bootstrap..."
-    npx cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/$AWS_REGION"
+    npx cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text --region "$AWS_REGION")/$AWS_REGION"
     echo "  ✓ CDK bootstrap complete"
 fi
 echo ""
