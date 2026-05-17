@@ -560,6 +560,19 @@ def trt_worker_process(worker_id, request_queue, response_dict, model_name,
     with open(metadata_path, "r") as f:
         metadata = json.load(f)
 
+    # Validate required metadata fields
+    if "vocabulary" not in metadata:
+        print(
+            f"[Worker {worker_id}] ERROR: metadata.json missing 'vocabulary' field. "
+            f"Falling back to PyTorch inference.",
+            flush=True,
+        )
+        worker_process(
+            worker_id, request_queue, response_dict, model_name,
+            bucket, chunk_duration, max_duration, use_fp16, ready_event
+        )
+        return
+
     vocabulary = metadata["vocabulary"]
     blank_id = metadata.get("blank_id", 0)
     n_mels = metadata.get("n_mels", 80)
@@ -706,7 +719,11 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
     import numpy as np
     import pycuda.driver as cuda
 
-    base_name = os.path.splitext(os.path.basename(input_key))[0]
+    # Sanitize filename to prevent path traversal
+    safe_name = os.path.basename(input_key)
+    if not safe_name or safe_name in ('.', '..'):
+        raise ValueError(f"Invalid input_key: {input_key}")
+    base_name = os.path.splitext(safe_name)[0]
     output_key = f"output/{base_name}_transcript.json"
 
     # Download audio
@@ -893,107 +910,124 @@ def _run_trt_inference(encoder_engine, encoder_context, decoder_engine,
     encoder_context.set_input_shape("audio_signal", (batch_size, n_mels_dim, time_dim))
     encoder_context.set_input_shape("length", (batch_size,))
 
-    # Allocate device memory for encoder
-    d_audio = cuda.mem_alloc(audio_signal.nbytes)
-    d_length = cuda.mem_alloc(length_input.nbytes)
+    allocations = []  # Track GPU memory for cleanup on error
+    try:
+        # Allocate device memory for encoder
+        d_audio = cuda.mem_alloc(audio_signal.nbytes)
+        allocations.append(d_audio)
+        d_length = cuda.mem_alloc(length_input.nbytes)
+        allocations.append(d_length)
 
-    # Get encoder output shape
-    # Encoder output is typically (batch, time_encoded, encoder_dim) or (batch, encoder_dim, time_encoded)
-    # We need to query the engine for output shape after setting input shapes
-    encoded_shape = encoder_context.get_tensor_shape("encoded")
-    encoded_len_shape = encoder_context.get_tensor_shape("encoded_len")
+        # Get encoder output shape
+        # Encoder output is typically (batch, time_encoded, encoder_dim) or (batch, encoder_dim, time_encoded)
+        # We need to query the engine for output shape after setting input shapes
+        encoded_shape = encoder_context.get_tensor_shape("encoded")
+        encoded_len_shape = encoder_context.get_tensor_shape("encoded_len")
 
-    encoded_output = np.empty(encoded_shape, dtype=np.float32)
-    encoded_len_output = np.empty(encoded_len_shape, dtype=np.int64)
+        encoded_output = np.empty(encoded_shape, dtype=np.float32)
+        encoded_len_output = np.empty(encoded_len_shape, dtype=np.int64)
 
-    d_encoded = cuda.mem_alloc(encoded_output.nbytes)
-    d_encoded_len = cuda.mem_alloc(encoded_len_output.nbytes)
+        d_encoded = cuda.mem_alloc(encoded_output.nbytes)
+        allocations.append(d_encoded)
+        d_encoded_len = cuda.mem_alloc(encoded_len_output.nbytes)
+        allocations.append(d_encoded_len)
 
-    # Copy inputs to device
-    cuda.memcpy_htod(d_audio, audio_signal)
-    cuda.memcpy_htod(d_length, length_input)
+        # Copy inputs to device
+        cuda.memcpy_htod(d_audio, audio_signal)
+        cuda.memcpy_htod(d_length, length_input)
 
-    # Set tensor addresses
-    encoder_context.set_tensor_address("audio_signal", int(d_audio))
-    encoder_context.set_tensor_address("length", int(d_length))
-    encoder_context.set_tensor_address("encoded", int(d_encoded))
-    encoder_context.set_tensor_address("encoded_len", int(d_encoded_len))
+        # Set tensor addresses
+        encoder_context.set_tensor_address("audio_signal", int(d_audio))
+        encoder_context.set_tensor_address("length", int(d_length))
+        encoder_context.set_tensor_address("encoded", int(d_encoded))
+        encoder_context.set_tensor_address("encoded_len", int(d_encoded_len))
 
-    # Execute encoder
-    encoder_context.execute_async_v3(stream_handle=0)
-    cuda.Context.synchronize()
-
-    # Copy encoder output back
-    cuda.memcpy_dtoh(encoded_output, d_encoded)
-    cuda.memcpy_dtoh(encoded_len_output, d_encoded_len)
-
-    # Free encoder input memory
-    d_audio.free()
-    d_length.free()
-
-    # Run decoder if separate engine exists
-    if decoder_engine is not None and decoder_context is not None:
-        # Decoder input: (batch, encoder_dim, time_encoded)
-        # The encoder output may be (batch, time, dim) - need to transpose
-        if encoded_output.ndim == 3 and encoded_output.shape[2] == encoder_dim:
-            # (batch, time, dim) -> (batch, dim, time)
-            decoder_input = np.ascontiguousarray(encoded_output.transpose(0, 2, 1))
-        else:
-            decoder_input = np.ascontiguousarray(encoded_output)
-
-        dec_time = decoder_input.shape[2] if decoder_input.ndim == 3 else decoder_input.shape[1]
-
-        decoder_context.set_input_shape(
-            "encoder_output",
-            (batch_size, encoder_dim, dec_time),
-        )
-
-        d_dec_input = cuda.mem_alloc(decoder_input.nbytes)
-        cuda.memcpy_htod(d_dec_input, decoder_input)
-
-        # Get decoder output shape
-        logits_shape = decoder_context.get_tensor_shape("logits")
-        logits_output = np.empty(logits_shape, dtype=np.float32)
-        d_logits = cuda.mem_alloc(logits_output.nbytes)
-
-        decoder_context.set_tensor_address("encoder_output", int(d_dec_input))
-        decoder_context.set_tensor_address("logits", int(d_logits))
-
-        decoder_context.execute_async_v3(stream_handle=0)
+        # Execute encoder
+        encoder_context.execute_async_v3(stream_handle=0)
         cuda.Context.synchronize()
 
-        cuda.memcpy_dtoh(logits_output, d_logits)
+        # Copy encoder output back
+        cuda.memcpy_dtoh(encoded_output, d_encoded)
+        cuda.memcpy_dtoh(encoded_len_output, d_encoded_len)
 
-        d_dec_input.free()
-        d_logits.free()
-        d_encoded.free()
-        d_encoded_len.free()
+        # Free encoder input memory
+        d_audio.free()
+        d_length.free()
 
-        # logits_output shape: (batch, time, vocab) or (batch, vocab, time)
-        logits = logits_output[0]  # Remove batch dim
-        # Determine orientation using vocab_size from metadata when available
-        # This avoids the fragile heuristic of comparing dimensions by size,
-        # which fails when time steps < vocab_size (short audio clips < ~10s).
-        if logits.ndim == 2 and vocab_size is not None:
-            if logits.shape[0] == vocab_size and logits.shape[1] != vocab_size:
+        # Run decoder if separate engine exists
+        if decoder_engine is not None and decoder_context is not None:
+            # Decoder input: (batch, encoder_dim, time_encoded)
+            # The encoder output may be (batch, time, dim) - need to transpose
+            if encoded_output.ndim == 3 and encoded_output.shape[2] == encoder_dim:
+                # (batch, time, dim) -> (batch, dim, time)
+                decoder_input = np.ascontiguousarray(encoded_output.transpose(0, 2, 1))
+            else:
+                decoder_input = np.ascontiguousarray(encoded_output)
+
+            dec_time = decoder_input.shape[2] if decoder_input.ndim == 3 else decoder_input.shape[1]
+
+            decoder_context.set_input_shape(
+                "encoder_output",
+                (batch_size, encoder_dim, dec_time),
+            )
+
+            d_dec_input = cuda.mem_alloc(decoder_input.nbytes)
+            allocations.append(d_dec_input)
+            cuda.memcpy_htod(d_dec_input, decoder_input)
+
+            # Get decoder output shape
+            logits_shape = decoder_context.get_tensor_shape("logits")
+            logits_output = np.empty(logits_shape, dtype=np.float32)
+            d_logits = cuda.mem_alloc(logits_output.nbytes)
+            allocations.append(d_logits)
+
+            decoder_context.set_tensor_address("encoder_output", int(d_dec_input))
+            decoder_context.set_tensor_address("logits", int(d_logits))
+
+            decoder_context.execute_async_v3(stream_handle=0)
+            cuda.Context.synchronize()
+
+            cuda.memcpy_dtoh(logits_output, d_logits)
+
+            d_dec_input.free()
+            d_logits.free()
+            d_encoded.free()
+            d_encoded_len.free()
+
+            # logits_output shape: (batch, time, vocab) or (batch, vocab, time)
+            logits = logits_output[0]  # Remove batch dim
+            # Determine orientation using vocab_size from metadata when available
+            # This avoids the fragile heuristic of comparing dimensions by size,
+            # which fails when time steps < vocab_size (short audio clips < ~10s).
+            if logits.ndim == 2 and vocab_size is not None:
+                if logits.shape[0] == vocab_size and logits.shape[1] != vocab_size:
+                    logits = logits.T
+            elif logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
+                # Fallback heuristic if vocab_size not provided
                 logits = logits.T
-        elif logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
-            # Fallback heuristic if vocab_size not provided
-            logits = logits.T
-    else:
-        # Single engine case - encoded_output contains final logits
-        d_encoded.free()
-        d_encoded_len.free()
-        logits = encoded_output[0]
-        # Determine orientation using vocab_size from metadata when available
-        if logits.ndim == 2 and vocab_size is not None:
-            if logits.shape[0] == vocab_size and logits.shape[1] != vocab_size:
+        else:
+            # Single engine case - encoded_output contains final logits
+            d_encoded.free()
+            d_encoded_len.free()
+            logits = encoded_output[0]
+            # Determine orientation using vocab_size from metadata when available
+            if logits.ndim == 2 and vocab_size is not None:
+                if logits.shape[0] == vocab_size and logits.shape[1] != vocab_size:
+                    logits = logits.T
+            elif logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
+                # Fallback heuristic if vocab_size not provided
                 logits = logits.T
-        elif logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
-            # Fallback heuristic if vocab_size not provided
-            logits = logits.T
 
-    return logits
+        # On success, clear allocations list (they were freed explicitly)
+        allocations.clear()
+        return logits
+    finally:
+        # Free any remaining allocations on error
+        for alloc in allocations:
+            try:
+                alloc.free()
+            except Exception:
+                pass
 
 
 def process_transcription(worker_id: int, model, s3_client, bucket: str, 
@@ -1007,7 +1041,11 @@ def process_transcription(worker_id: int, model, s3_client, bucket: str,
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     
-    base_name = os.path.splitext(os.path.basename(input_key))[0]
+    # Sanitize filename to prevent path traversal
+    safe_name = os.path.basename(input_key)
+    if not safe_name or safe_name in ('.', '..'):
+        raise ValueError(f"Invalid input_key: {input_key}")
+    base_name = os.path.splitext(safe_name)[0]
     output_key = f"output/{base_name}_transcript.json"
     
     # Use secure temp file instead of predictable /tmp path
