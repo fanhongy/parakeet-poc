@@ -56,6 +56,9 @@ const parakeetStack = new ParakeetPocStack(app, 'ParakeetPocStack', {
   // Pass digest to trigger ECS update when image changes
   // Get digest after build: aws ecr describe-images --repository-name parakeet-asr --image-ids imageTag=latest --query 'imageDetails[0].imageDigest' --output text
   ecrImageDigest: imageDigest,
+  // TensorRT optimization: set to true if Docker image was built with BUILD_TENSORRT=true
+  // Requires TRT engine pre-compiled for target GPU architecture (A10G)
+  useTensorRT: false,
 });
 
 // ============================================================================

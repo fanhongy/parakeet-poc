@@ -206,6 +206,54 @@ Benchmarks on g5.2xlarge (A10G 24GB) with `parakeet-ctc-0.6b`, FP32 precision, 3
 - Test volume: 405 requests processed in 30-minute window
 - Model: nvidia/parakeet-ctc-0.6b
 
+## TensorRT Optimization
+
+TensorRT compiles the Parakeet model into optimized GPU kernels with safe FP16 mixed precision, avoiding the corruption issues seen with naive `.half()` conversion. This provides significant performance improvements without sacrificing transcription quality.
+
+### Benefits
+
+- **Lower GPU memory per worker:** ~40-50% reduction compared to FP32 PyTorch
+- **Faster inference:** TensorRT-optimized execution with fused kernels
+- **More workers possible:** Lower per-worker memory allows running more parallel workers on the same GPU
+
+### Building with TensorRT
+
+To compile the TensorRT engine during Docker build:
+
+```bash
+cd parakeet-poc/docker
+docker build --build-arg BUILD_TENSORRT=true --gpus all -f Dockerfile -t parakeet-asr:trt ..
+```
+
+**Important:** The TensorRT engine is GPU-architecture-specific. An engine compiled on an A10G GPU will only work on A10G instances. Build on the same GPU type you plan to deploy to.
+
+### Enabling at Runtime
+
+Set `useTensorRT: true` in the CDK stack props (in `bin/parakeet-poc.ts`), or set the `USE_TENSORRT=true` environment variable on the container. The server will look for the pre-compiled engine at `/app/trt_model/model.engine`.
+
+**Fallback behavior:** If the TensorRT engine file is not found at the expected path, the server automatically falls back to standard PyTorch inference. This makes the setting safe to enable even if the image was not built with `BUILD_TENSORRT=true`.
+
+### Standalone Export
+
+You can run the export script independently on a GPU instance without Docker:
+
+```bash
+python parakeet-poc/scripts/export_tensorrt.py \
+  --model nvidia/parakeet-ctc-0.6b \
+  --output-dir ./trt_model \
+  --fp16
+```
+
+This is useful for pre-compiling engines on target hardware and mounting them into the container at runtime.
+
+### GPU Architecture Constraint
+
+TensorRT engines are compiled for a specific GPU architecture (compute capability). An engine built on:
+- **A10G** (g5 instances) only works on A10G
+- **T4** (g4dn instances) only works on T4
+
+Always build the engine on the same GPU type that will run in production.
+
 ## License
 
 This project is for demonstration purposes. NVIDIA NeMo and Parakeet models are subject to NVIDIA's licensing terms.
