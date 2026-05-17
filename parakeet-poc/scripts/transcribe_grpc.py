@@ -343,6 +343,25 @@ def compute_mel_spectrogram(audio_path, sample_rate=16000, n_fft=512,
                             hop_length=160, win_length=320, n_mels=80):
     """Compute log-mel spectrogram features from audio file.
 
+    This is a NumPy reimplementation of the mel feature extraction for use in
+    the TensorRT inference path (avoids loading NeMo/PyTorch at runtime).
+
+    NOTE: This implementation differs from NeMo's AudioToMelSpectrogramPreprocessor
+    in several ways that may cause minor WER degradation:
+      - No dither noise is added before STFT (NeMo adds small random noise to
+        prevent log(0); here we use a 1e-9 floor instead).
+      - Padding uses np.pad with 'reflect' mode which approximates but does not
+        exactly match torch.stft center=True behavior (potential off-by-one at
+        signal boundaries).
+      - Per-utterance normalization (zero mean, unit variance) is applied per
+        feature dimension. NeMo's behavior depends on model config -- some models
+        use global stats or per-batch normalization.
+      - Resampling (when input is not 16kHz) uses scipy.signal.resample which
+        applies a proper anti-aliasing filter in the frequency domain. This is
+        a reasonable approximation but not identical to NeMo's internal resampling.
+    If transcription accuracy is critical, validate outputs against NeMo's
+    preprocessor on representative audio samples before deploying this path.
+
     Replicates the NeMo preprocessor behavior:
       - Load audio at 16kHz mono
       - STFT with 512 FFT, 160 hop (10ms), 320 window (20ms)
@@ -361,11 +380,26 @@ def compute_mel_spectrogram(audio_path, sample_rate=16000, n_fft=512,
     if len(data.shape) > 1:
         data = data.mean(axis=1)  # mono
     if sr != sample_rate:
-        # Simple resampling via linear interpolation
-        duration = len(data) / sr
-        target_len = int(duration * sample_rate)
-        indices = np.linspace(0, len(data) - 1, target_len)
-        data = np.interp(indices, np.arange(len(data)), data)
+        # Resample using scipy.signal.resample which applies a proper
+        # anti-aliasing filter (frequency-domain method) to avoid aliasing
+        # artifacts that linear interpolation would introduce.
+        import warnings
+        try:
+            from scipy.signal import resample as scipy_resample
+            target_len = int(len(data) * sample_rate / sr)
+            data = scipy_resample(data, target_len).astype(np.float32)
+        except ImportError:
+            warnings.warn(
+                "scipy not available; falling back to linear interpolation for "
+                "resampling. This may introduce aliasing artifacts and degrade "
+                "transcription quality for non-16kHz audio.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            duration = len(data) / sr
+            target_len = int(duration * sample_rate)
+            indices = np.linspace(0, len(data) - 1, target_len)
+            data = np.interp(indices, np.arange(len(data)), data).astype(np.float32)
 
     # STFT
     # Pad signal
@@ -545,8 +579,33 @@ def trt_worker_process(worker_id, request_queue, response_dict, model_name,
         engine_dir, engine_files.get("decoder", "model_decoder.engine")
     )
 
-    # If separate encoder/decoder engines do not exist, use the main engine
-    use_single_engine = not os.path.isfile(encoder_engine_path)
+    # Verify both encoder and decoder engines exist. A partial build (e.g.,
+    # encoder present but decoder missing) would silently produce incorrect
+    # output if we proceeded. Fall back to PyTorch in that case.
+    if not os.path.isfile(encoder_engine_path):
+        print(
+            f"[Worker {worker_id}] WARNING: Encoder engine not found at "
+            f"{encoder_engine_path}. Falling back to PyTorch inference.",
+            flush=True,
+        )
+        worker_process(
+            worker_id, request_queue, response_dict, model_name,
+            bucket, chunk_duration, max_duration, use_fp16, ready_event
+        )
+        return
+
+    if not os.path.isfile(decoder_engine_path):
+        print(
+            f"[Worker {worker_id}] WARNING: Decoder engine not found at "
+            f"{decoder_engine_path}. Partial TRT build detected (encoder present, "
+            f"decoder missing). Falling back to PyTorch inference.",
+            flush=True,
+        )
+        worker_process(
+            worker_id, request_queue, response_dict, model_name,
+            bucket, chunk_duration, max_duration, use_fp16, ready_event
+        )
+        return
 
     print(f"[Worker {worker_id}] Loading TensorRT engine(s)...", flush=True)
     start = time.time()
@@ -559,17 +618,14 @@ def trt_worker_process(worker_id, request_queue, response_dict, model_name,
     runtime = trt.Runtime(TRT_LOGGER)
 
     # Load encoder engine
-    with open(encoder_engine_path if not use_single_engine else engine_path, "rb") as f:
+    with open(encoder_engine_path, "rb") as f:
         encoder_engine = runtime.deserialize_cuda_engine(f.read())
     encoder_context = encoder_engine.create_execution_context()
 
     # Load decoder engine
-    decoder_engine = None
-    decoder_context = None
-    if not use_single_engine and os.path.isfile(decoder_engine_path):
-        with open(decoder_engine_path, "rb") as f:
-            decoder_engine = runtime.deserialize_cuda_engine(f.read())
-        decoder_context = decoder_engine.create_execution_context()
+    with open(decoder_engine_path, "rb") as f:
+        decoder_engine = runtime.deserialize_cuda_engine(f.read())
+    decoder_context = decoder_engine.create_execution_context()
 
     elapsed = time.time() - start
     print(
@@ -622,6 +678,7 @@ def trt_worker_process(worker_id, request_queue, response_dict, model_name,
                     n_fft=n_fft,
                     sample_rate=sample_rate,
                     encoder_dim=encoder_dim,
+                    vocab_size=metadata.get("vocab_size"),
                 )
                 response_dict[request_id] = {"result": result, "error": None, "done": True}
 
@@ -644,7 +701,7 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
                               bucket, input_key, chunk_duration, max_duration,
                               model_name, vocabulary, blank_id, n_mels,
                               hop_length, win_length, n_fft, sample_rate,
-                              encoder_dim):
+                              encoder_dim, vocab_size=None):
     """Process a single transcription request using TensorRT."""
     import numpy as np
     import pycuda.driver as cuda
@@ -697,6 +754,7 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
             encoder_engine, encoder_context,
             decoder_engine, decoder_context,
             features, seq_len, encoder_dim,
+            vocab_size=vocab_size,
         )
 
         # CTC decode
@@ -735,6 +793,22 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
 
     print(f"[Worker {worker_id}] Transcription completed in {transcribe_time:.2f}s (TRT)", flush=True)
 
+    # Collect GPU memory metrics for capacity planning
+    gpu_peak_gb = 0
+    memory = {}
+    try:
+        import pycuda.driver as cuda
+        # Query GPU memory via nvidia-smi for accurate reporting
+        gpu_stats = get_gpu_utilization()
+        if gpu_stats:
+            gpu_peak_gb = gpu_stats.get('memory_used_mb', 0) / 1024.0
+            memory = {
+                'gpu_peak_gb': round(gpu_peak_gb, 2),
+                'gpu_total_gb': round(gpu_stats.get('memory_total_mb', 0) / 1024.0, 2),
+            }
+    except Exception:
+        pass
+
     # Emit request-level metrics
     total_time = download_time + split_time + transcribe_time
     emit_request_metrics(
@@ -747,6 +821,7 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
         download_time=download_time,
         prep_time=split_time,
         transcribe_time=transcribe_time,
+        gpu_peak_gb=gpu_peak_gb,
     )
 
     result = {
@@ -766,7 +841,7 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
             "chunk_duration_seconds": chunk_duration,
             "total_chunks": len(chunks),
         },
-        "memory": {},
+        "memory": memory,
         "worker_id": worker_id,
         "inference_backend": "tensorrt",
     }
@@ -784,7 +859,8 @@ def process_transcription_trt(worker_id, encoder_engine, encoder_context,
 
 
 def _run_trt_inference(encoder_engine, encoder_context, decoder_engine,
-                       decoder_context, features, seq_len, encoder_dim):
+                       decoder_context, features, seq_len, encoder_dim,
+                       vocab_size=None):
     """Run TensorRT inference on mel features and return logits.
 
     Args:
@@ -795,6 +871,8 @@ def _run_trt_inference(encoder_engine, encoder_context, decoder_engine,
         features: numpy array (n_mels, time)
         seq_len: number of time frames
         encoder_dim: encoder output dimension
+        vocab_size: vocabulary size (including blank token) from metadata,
+                    used to determine logits orientation deterministically
 
     Returns:
         logits: numpy array (time, vocab_size)
@@ -893,15 +971,26 @@ def _run_trt_inference(encoder_engine, encoder_context, decoder_engine,
 
         # logits_output shape: (batch, time, vocab) or (batch, vocab, time)
         logits = logits_output[0]  # Remove batch dim
-        # If shape is (vocab, time), transpose to (time, vocab)
-        if logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
+        # Determine orientation using vocab_size from metadata when available
+        # This avoids the fragile heuristic of comparing dimensions by size,
+        # which fails when time steps < vocab_size (short audio clips < ~10s).
+        if logits.ndim == 2 and vocab_size is not None:
+            if logits.shape[0] == vocab_size and logits.shape[1] != vocab_size:
+                logits = logits.T
+        elif logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
+            # Fallback heuristic if vocab_size not provided
             logits = logits.T
     else:
         # Single engine case - encoded_output contains final logits
         d_encoded.free()
         d_encoded_len.free()
         logits = encoded_output[0]
-        if logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
+        # Determine orientation using vocab_size from metadata when available
+        if logits.ndim == 2 and vocab_size is not None:
+            if logits.shape[0] == vocab_size and logits.shape[1] != vocab_size:
+                logits = logits.T
+        elif logits.ndim == 2 and logits.shape[0] < logits.shape[1]:
+            # Fallback heuristic if vocab_size not provided
             logits = logits.T
 
     return logits

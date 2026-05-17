@@ -165,7 +165,8 @@ def export_decoder_onnx(model, output_path, max_seq_len):
 
 
 def build_tensorrt_engine(
-    encoder_onnx_path, decoder_onnx_path, engine_path, max_seq_len, use_fp16
+    encoder_onnx_path, decoder_onnx_path, engine_path, max_seq_len, use_fp16,
+    encoder_dim=512
 ):
     """Build a TensorRT engine from ONNX models.
 
@@ -173,6 +174,14 @@ def build_tensorrt_engine(
     serialized file, or build them as separate engines. For simplicity,
     we build the encoder (the heavy part) as the main engine and include
     the decoder as a second engine in the same output directory.
+
+    Args:
+        encoder_onnx_path: Path to the encoder ONNX file
+        decoder_onnx_path: Path to the decoder ONNX file
+        engine_path: Output path for the combined engine symlink
+        max_seq_len: Maximum sequence length for TRT optimization profiles
+        use_fp16: Whether to enable FP16 mixed precision
+        encoder_dim: Encoder output dimension (d_model) from the loaded model
     """
     import tensorrt as trt
 
@@ -180,6 +189,7 @@ def build_tensorrt_engine(
 
     print(f"[Export] Building TensorRT engine (FP16={use_fp16})...")
     print(f"[Export] Max sequence length: {max_seq_len}")
+    print(f"[Export] Encoder dimension: {encoder_dim}")
 
     # Build encoder engine
     encoder_engine_path = engine_path.replace(".engine", "_encoder.engine")
@@ -204,8 +214,7 @@ def build_tensorrt_engine(
         ],
     )
 
-    # Build decoder engine
-    # Need to determine encoder output dim from model config
+    # Build decoder engine using the actual encoder_dim from the model
     decoder_engine_path = engine_path.replace(".engine", "_decoder.engine")
     _build_single_engine(
         decoder_onnx_path,
@@ -215,9 +224,9 @@ def build_tensorrt_engine(
         input_profiles=[
             {
                 "encoder_output": {
-                    "min": (1, 512, 16),
-                    "opt": (1, 512, 750),
-                    "max": (1, 512, max_seq_len),
+                    "min": (1, encoder_dim, 16),
+                    "opt": (1, encoder_dim, 750),
+                    "max": (1, encoder_dim, max_seq_len),
                 },
             }
         ],
@@ -359,7 +368,8 @@ def main():
     # Step 4: Build TensorRT engines
     engine_path = os.path.join(args.output_dir, "model.engine")
     encoder_engine, decoder_engine = build_tensorrt_engine(
-        encoder_onnx, decoder_onnx, engine_path, args.max_sequence_length, use_fp16
+        encoder_onnx, decoder_onnx, engine_path, args.max_sequence_length, use_fp16,
+        encoder_dim=encoder_dim
     )
 
     # Step 5: Save metadata
