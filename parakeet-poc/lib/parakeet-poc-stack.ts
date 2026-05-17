@@ -30,6 +30,8 @@ interface ParakeetPocStackProps extends cdk.StackProps {
   // Optional: image digest to force ECS task update when image changes
   // Pass the digest from ECR (e.g., sha256:abc123...) to trigger rolling update
   ecrImageDigest?: string;
+  // Optional: enable TensorRT optimized inference (requires image built with BUILD_TENSORRT=true)
+  useTensorRT?: boolean;
 }
 
 export class ParakeetPocStack extends cdk.Stack {
@@ -129,13 +131,13 @@ export class ParakeetPocStack extends cdk.Stack {
     const standardService = this.createParakeetService(
       standardConfig, vpc, cluster, bucket, logGroup, executionRole, taskRole, 
       lambdaSecurityGroup, props.parakeetModel, 'Standard',
-      props.ecrRepoName, props.ecrImageTag, props.ecrImageDigest
+      props.ecrRepoName, props.ecrImageTag, props.ecrImageDigest, props.useTensorRT
     );
 
     const noChunkService = this.createParakeetService(
       noChunkConfig, vpc, cluster, bucket, logGroup, executionRole, taskRole,
       lambdaSecurityGroup, props.parakeetModel, 'NoChunk',
-      props.ecrRepoName, props.ecrImageTag, props.ecrImageDigest
+      props.ecrRepoName, props.ecrImageTag, props.ecrImageDigest, props.useTensorRT
     );
 
     // Lambda layer for gRPC dependencies
@@ -226,6 +228,7 @@ export class ParakeetPocStack extends cdk.Stack {
     ecrRepoName?: string,
     ecrImageTag?: string,
     ecrImageDigest?: string,
+    useTensorRT?: boolean,
   ): { nlb: elbv2.NetworkLoadBalancer; service: ecs.Ec2Service } {
     
     // Determine memory/CPU based on instance type
@@ -367,6 +370,7 @@ export class ParakeetPocStack extends cdk.Stack {
         GRPC_PORT: '50051',
         PYTORCH_CUDA_ALLOC_CONF: 'expandable_segments:True',
         USE_FP16: 'false',  // Disabled - RNNT models have CUDA memory issues with FP16 on long sequences
+        USE_TENSORRT: useTensorRT ? 'true' : 'false',
         CHUNK_DURATION: config.chunkDurationSeconds.toString(),
         MAX_AUDIO_DURATION_MINUTES: config.maxAudioDurationMinutes.toString(),
         NUM_WORKERS: config.numWorkers.toString(),  // Parallel worker processes
